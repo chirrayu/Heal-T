@@ -2,12 +2,26 @@ import requests
 
 BASE = "http://localhost:8000"
 
+from config import ADMIN_USERNAME, ADMIN_PASSWORD
+
 # Login
 print("Logging in...")
 login_response = requests.post(f"{BASE}/auth/login", data={
-    "username": "admin",
-    "password": "triage2024"
+    "username": ADMIN_USERNAME,
+    "password": ADMIN_PASSWORD
 })
+
+if login_response.status_code != 200:
+    login_response = requests.post(f"{BASE}/auth/login", data={
+        "username": ADMIN_USERNAME,
+        "password": "triage2024"
+    })
+
+if login_response.status_code != 200:
+    login_response = requests.post(f"{BASE}/auth/login", data={
+        "username": "admin",
+        "password": "triage2024"
+    })
 
 if login_response.status_code != 200:
     print(f"Login failed: HTTP {login_response.status_code}")
@@ -31,7 +45,7 @@ squads = {}
 existing_squads = requests.get(f"{BASE}/squads/").json()
 for s in existing_squads:
     squads[s["name"]] = s["id"]
-    print(f"Found existing squad: {s['name']} → {s['id']}")
+    print(f"Found existing squad: {s['name']} -> {s['id']}")
 
 # Create any missing squads
 for name in ["Alpha", "Bravo", "Charlie", "Delta"]:
@@ -39,7 +53,7 @@ for name in ["Alpha", "Bravo", "Charlie", "Delta"]:
         r = requests.post(f"{BASE}/squads/", json={"name": name}, headers=headers)
         if r.status_code == 200:
             squads[name] = r.json()["id"]
-            print(f"Created squad: {name} → {squads[name]}")
+            print(f"Created squad: {name} -> {squads[name]}")
         else:
             print(f"Failed to create squad {name}: {r.text}")
 
@@ -63,7 +77,7 @@ for s in soldiers_data:
 
     r = requests.post(f"{BASE}/soldiers/", json=s, headers=headers)
     if r.status_code == 200:
-        print(f"Created soldier: {s['name']} → {r.json()['id']}")
+        print(f"Created soldier: {s['name']} -> {r.json()['id']}")
     else:
         print(f"Failed to create {s['name']}: {r.text}")
 

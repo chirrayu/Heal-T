@@ -10,12 +10,28 @@ BASE = "http://localhost:8000"
 # waiting for it to happen by random chance.
 BLAST_CHANCE = 0.1  # 10%
 
+from config import ADMIN_USERNAME, ADMIN_PASSWORD
+
 # Login
 print("Logging in...")
 response = requests.post(f"{BASE}/auth/login", data={
-    "username": "admin",
-    "password": "triage2024"
+    "username": ADMIN_USERNAME,
+    "password": ADMIN_PASSWORD
 })
+
+if response.status_code != 200:
+    # Try fallback default password
+    response = requests.post(f"{BASE}/auth/login", data={
+        "username": ADMIN_USERNAME,
+        "password": "triage2024"
+    })
+
+if response.status_code != 200:
+    # Try default admin/triage2024
+    response = requests.post(f"{BASE}/auth/login", data={
+        "username": "admin",
+        "password": "triage2024"
+    })
 
 if response.status_code != 200:
     print(f"Login failed: {response.text}")
@@ -66,10 +82,10 @@ while True:
         r = requests.post(f"{BASE}/vitals/", json=vitals)
         if r.status_code == 200:
             result = r.json()
-            blast_tag = " 💥 BLAST" if is_blast else ""
+            blast_tag = " [BLAST]" if is_blast else ""
             print(
-                f"{soldier['name']} → HR: {vitals['hr']} | SpO2: {vitals['spo2']}% | "
-                f"Temp: {vitals['temp']}°F | Battery: {vitals['battery']}% | "
+                f"{soldier['name']} -> HR: {vitals['hr']} | SpO2: {vitals['spo2']}% | "
+                f"Temp: {vitals['temp']}F | Battery: {vitals['battery']}% | "
                 f"Act: {vitals['activity_index']} | RR: {vitals['respiratory_rate']} | "
                 f"Score: {result.get('score')} | Class: {result.get('classification')}"
                 f"{blast_tag}"

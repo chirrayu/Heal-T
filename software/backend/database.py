@@ -162,6 +162,22 @@ class ESP32DeviceModel(Base):
 # ── DB init helper ────────────────────────────────────────────────
 def init_db():
     Base.metadata.create_all(bind=engine)
+    
+    # Auto-migrate missing columns on existing SQLite/Postgres tables
+    with engine.connect() as conn:
+        for table, col, col_type in [
+            ("vitals", "device_id", "VARCHAR"),
+            ("vitals", "connection_type", "VARCHAR"),
+            ("vitals", "blast_severity", "FLOAT"),
+            ("vitals", "blast_timestamp", "DATETIME"),
+            ("vitals", "score", "FLOAT"),
+            ("vitals", "classification", "VARCHAR"),
+        ]:
+            try:
+                conn.execute(__import__("sqlalchemy").text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
+                conn.commit()
+            except Exception:
+                pass # Column already exists
 
 
 # ── Dependency for FastAPI routes ─────────────────────────────────

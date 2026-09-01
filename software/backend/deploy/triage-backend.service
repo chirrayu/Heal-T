@@ -1,0 +1,18 @@
+[Unit]
+Description=Triage AI Backend Service (FastAPI + Gunicorn / Uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/triage-backend/software/backend
+EnvironmentFile=/home/ubuntu/triage-backend/software/backend/.env
+ExecStart=/home/ubuntu/triage-backend/software/backend/venv/bin/gunicorn -w 2 -k uvicorn.workers.UvicornWorker main:app --bind 127.0.0.1:8000 --access-logfile /home/ubuntu/triage-backend/software/backend/access.log --error-logfile /home/ubuntu/triage-backend/software/backend/error.log
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

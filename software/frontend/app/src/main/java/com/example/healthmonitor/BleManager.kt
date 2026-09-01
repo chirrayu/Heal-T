@@ -115,7 +115,7 @@ object BleManager {
         scanning = true
         AppState.connectionStatus.value = "BLE_SCANNING"
         Log.d(TAG, "Starting BLE scan for suit beacon")
-        scanner.startScan(filters, settings, scanCallback)
+        scanner?.startScan(filters, settings, scanCallback)
     }
 
     @SuppressLint("MissingPermission")
