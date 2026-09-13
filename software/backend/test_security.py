@@ -1,5 +1,7 @@
 # Automated security and RBAC test suite for FastAPI backend
 import os
+import json
+import uuid
 import pytest
 import hmac
 import hashlib
@@ -19,6 +21,41 @@ from database import init_db, SessionLocal, Squad, SoldierModel
 from auth import hash_password, UserCredential
 
 client = TestClient(app)
+
+# ── Login caches ─────────────────────────────────────────────────
+# /auth/login is rate-limited (5/min per client) and the whole suite
+# shares one test client IP, so each identity logs in at most once
+# per test session.
+_admin_headers_cache = None
+def admin_headers_cached():
+    global _admin_headers_cache
+    if _admin_headers_cache is None:
+        res = client.post("/auth/login", data={"username": "admin", "password": "triage2024"})
+        assert res.status_code == 200
+        _admin_headers_cache = {"Authorization": f"Bearer {res.json()['access_token']}"}
+    return _admin_headers_cache
+
+_operator_headers_cache = None
+def operator_headers_cached():
+    global _operator_headers_cache
+    if _operator_headers_cache is None:
+        # Create the user directly in the DB (via the API would cost an
+        # extra admin login against the rate limit)
+        db = SessionLocal()
+        try:
+            if not db.query(UserCredential).filter(UserCredential.username == "operator_user").first():
+                db.add(UserCredential(
+                    username="operator_user",
+                    password_hash=hash_password("password123"),
+                    role="operator"
+                ))
+                db.commit()
+        finally:
+            db.close()
+        res = client.post("/auth/login", data={"username": "operator_user", "password": "password123"})
+        assert res.status_code == 200
+        _operator_headers_cache = {"Authorization": f"Bearer {res.json()['access_token']}"}
+    return _operator_headers_cache
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -96,9 +133,8 @@ def test_admin_login_and_access():
 
 def test_rbac_roles_and_privilege_separation():
     """Verify role creation, permissions, and forbidden access for restricted roles."""
-    # 1. Admin logs in
-    admin_login = client.post("/auth/login", data={"username": "admin", "password": "triage2024"}).json()
-    admin_headers = {"Authorization": f"Bearer {admin_login['access_token']}"}
+    # 1. Admin logs in (cached — protects the session from the login rate limit)
+    admin_headers = admin_headers_cached()
 
     # 2. Admin creates a medic and a commander
     client.post("/auth/users", json={"username": "medic_user", "password": "password123", "role": "medic"}, headers=admin_headers)
@@ -168,11 +204,11 @@ def test_device_ingestion_authentication():
     assert loc_res.status_code == 200
 
     # 5. Valid HMAC Signature authentication
+    #    Signed message = "<timestamp>.<nonce>" + raw body; nonce is single-use
     now_ts = str(time.time())
-    body_str = client.app.router  # trigger request with raw bytes
-    import json
     raw_body = json.dumps(vitals_payload).encode("utf-8")
-    sig_msg = now_ts.encode("utf-8") + raw_body
+    nonce = uuid.uuid4().hex
+    sig_msg = f"{now_ts}.{nonce}".encode("utf-8") + raw_body
     signature = hmac.new("device-hmac-secret-key".encode("utf-8"), sig_msg, hashlib.sha256).hexdigest()
 
     hmac_res = client.post(
@@ -181,10 +217,146 @@ def test_device_ingestion_authentication():
         headers={
             "Content-Type": "application/json",
             "X-Signature": signature,
-            "X-Timestamp": now_ts
+            "X-Timestamp": now_ts,
+            "X-Nonce": nonce
         }
     )
     assert hmac_res.status_code == 200
+
+
+def test_ingestion_rejects_non_admin_user_jwt_but_allows_admin():
+    """Fix (Vuln 4): an operator JWT is NOT a device identity, so telemetry
+    ingestion must reject it; an admin JWT remains allowed as an override."""
+    op_headers = operator_headers_cached()
+    admin_headers = admin_headers_cached()
+
+    payload = {"soldier_id": "SOLDIER-SEC-01", "hr": 80, "spo2": 98}
+
+    # Operator token -> 401 on both ingestion endpoints
+    assert client.post("/vitals/", json=payload, headers=op_headers).status_code == 401
+    assert client.post(
+        "/map/location",
+        json={"soldier_id": "SOLDIER-SEC-01", "latitude": 1.0, "longitude": 2.0},
+        headers=op_headers
+    ).status_code == 401
+
+    # Admin token -> 200
+    res = client.post("/vitals/", json=payload, headers=admin_headers)
+    assert res.status_code == 200
+    assert res.json()["hr"] == 80
+
+
+def test_hmac_replay_with_reused_nonce_is_rejected():
+    """Fix (Vuln 3): a captured signed request can be used exactly once;
+    replaying the same nonce is rejected, and a missing nonce is rejected."""
+    payload = {"soldier_id": "SOLDIER-SEC-01", "hr": 82, "spo2": 97}
+    raw_body = json.dumps(payload).encode("utf-8")
+    now_ts = str(time.time())
+    nonce = uuid.uuid4().hex
+    sig_msg = f"{now_ts}.{nonce}".encode("utf-8") + raw_body
+    signature = hmac.new("device-hmac-secret-key".encode("utf-8"), sig_msg, hashlib.sha256).hexdigest()
+    headers = {
+        "Content-Type": "application/json",
+        "X-Signature": signature,
+        "X-Timestamp": now_ts,
+        "X-Nonce": nonce
+    }
+
+    # First use of the nonce -> accepted
+    first = client.post("/vitals/", content=raw_body, headers=headers)
+    assert first.status_code == 200
+
+    # Identical replay (same nonce) -> rejected
+    replay = client.post("/vitals/", content=raw_body, headers=headers)
+    assert replay.status_code == 401
+    assert "nonce" in replay.json()["detail"].lower()
+
+    # Signature sent without a nonce -> rejected
+    no_nonce = {k: v for k, v in headers.items() if k != "X-Nonce"}
+    assert client.post("/vitals/", content=raw_body, headers=no_nonce).status_code == 401
+
+
+def test_esp32_websocket_rejects_non_admin_jwt():
+    """Fix (Vuln 4): the ESP32 telemetry socket accepts the device token or an
+    admin JWT only — an operator JWT must be refused."""
+    op_token = operator_headers_cached()["Authorization"].split(" ")[1]
+
+    with client.websocket_connect(f"/ws/esp32/ESP32-EVIL?token={op_token}") as ws:
+        ws.send_json({"type": "auth", "token": op_token})
+        msg = ws.receive_json()
+        assert msg["type"] == "error"
+        assert msg["message"] == "Unauthorized device"
+
+    # Sanity: the device token path still works
+    with client.websocket_connect("/ws/esp32/ESP32-SEC-DEV?device_token=suit-dev-token-secret") as ws:
+        init_msg = ws.receive_json()
+        assert init_msg["type"] == "connected"
+
+
+def test_ws_telemetry_forwarding_requires_admin():
+    """Fix (Vuln 4): a non-admin /ws/connect client cannot inject BLE telemetry
+    or send commands to devices; an admin client can."""
+    tele_msg = {
+        "type": "esp32_ble_telemetry",
+        "device_id": "ESP32-TEST-DEV",
+        "data": {"soldier_id": "SOLDIER-SEC-01", "hr": 90, "spo2": 98}
+    }
+
+    # Operator: both privileged message types get refused
+    op_token = operator_headers_cached()["Authorization"].split(" ")[1]
+    with client.websocket_connect(f"/ws/connect?token={op_token}") as ws:
+        assert ws.receive_json()["type"] == "snapshot"
+        ws.send_json(tele_msg)
+        assert ws.receive_json()["type"] == "error"
+        ws.send_json({"type": "switch_esp32_mode", "device_id": "ESP32-TEST-DEV", "mode": "ble"})
+        assert ws.receive_json()["type"] == "error"
+
+    # Admin: telemetry is accepted (ack). The successfully ingested reading is
+    # also broadcast as vitals_update to this "all"-feed socket, so skip any
+    # broadcasts until the ack arrives.
+    admin_token = admin_headers_cached()["Authorization"].split(" ")[1]
+    with client.websocket_connect(f"/ws/connect?token={admin_token}") as ws:
+        assert ws.receive_json()["type"] == "snapshot"
+        ws.send_json(tele_msg)
+        msg = None
+        for _ in range(5):
+            msg = ws.receive_json()
+            if msg["type"] == "ack":
+                break
+        assert msg is not None and msg["type"] == "ack", f"Never received ack, last message: {msg}"
+        assert msg["status"] == "ble_data_received"
+
+
+def test_production_boot_fails_closed_on_default_device_secrets():
+    """Fix (Vuln 2): in production the server must refuse to start while the
+    device secrets are still at their public development defaults."""
+    import config
+    original = (
+        config.ENVIRONMENT, config.SECRET_KEY,
+        config.ADMIN_USERNAME, config.ADMIN_PASSWORD,
+        config.DEVICE_AUTH_TOKEN, config.DEVICE_HMAC_SECRET,
+    )
+    try:
+        config.ENVIRONMENT = "production"
+        config.SECRET_KEY = "a-strong-random-secret-32-chars-long-000"
+        config.ADMIN_USERNAME = "fieldadmin"
+        config.ADMIN_PASSWORD = "Str0ng!Passw0rd#2026"
+        config.DEVICE_AUTH_TOKEN = config.DEFAULT_DEVICE_AUTH_TOKEN
+        config.DEVICE_HMAC_SECRET = config.DEFAULT_DEVICE_HMAC_SECRET
+
+        with pytest.raises(RuntimeError) as excinfo:
+            config.validate_production_settings()
+        assert "DEVICE_AUTH_TOKEN" in str(excinfo.value)
+        assert "DEVICE_HMAC_SECRET" in str(excinfo.value)
+
+        # With real secrets in place, validation passes
+        config.DEVICE_AUTH_TOKEN = "prod-device-token-xyz123"
+        config.DEVICE_HMAC_SECRET = "prod-hmac-secret-xyz123"
+        config.validate_production_settings()  # must not raise
+    finally:
+        (config.ENVIRONMENT, config.SECRET_KEY,
+         config.ADMIN_USERNAME, config.ADMIN_PASSWORD,
+         config.DEVICE_AUTH_TOKEN, config.DEVICE_HMAC_SECRET) = original
 
 
 def test_login_rate_limiting():
@@ -214,8 +386,8 @@ def test_websocket_authentication():
             pass
 
     # 2. Connect with valid user token -> accepted and receives snapshot
-    admin_login = client.post("/auth/login", data={"username": "admin", "password": "triage2024"}).json()
-    token = admin_login["access_token"]
+    #    (cached admin login — the suite must not exceed the login rate limit)
+    token = admin_headers_cached()["Authorization"].split(" ")[1]
 
     with client.websocket_connect(f"/ws/connect?token={token}") as ws:
         snapshot = ws.receive_json()

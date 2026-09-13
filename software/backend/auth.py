@@ -4,7 +4,7 @@ import hmac
 import hashlib
 import time
 from datetime import datetime, timedelta
-from typing import List, Optional, Callable
+from typing import Dict, List, Optional, Callable
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -188,27 +188,50 @@ get_current_operator  = require_roles("admin", "commander", "medic", "operator")
 
 
 # ── Ingestion Device Authentication (HMAC / Device Token) ─────────
+# Replay protection: a valid HMAC only proves the sender knows the secret
+# for a 300-second window, so every signed request must also carry a fresh
+# one-time X-Nonce (included in the signed message). Used nonces are kept
+# for twice the window so a captured request cannot be replayed even after
+# the original expires. In-memory per worker is sufficient at this scale.
+_NONCE_TTL_SECONDS = 600
+_used_nonces: Dict[str, float] = {}
+
+def _consume_nonce(nonce: str) -> bool:
+    """Record a nonce. Returns False if it was already used (replay attempt)."""
+    now = time.time()
+    for used in [k for k, exp in _used_nonces.items() if exp <= now]:
+        del _used_nonces[used]
+    if nonce in _used_nonces:
+        return False
+    _used_nonces[nonce] = now + _NONCE_TTL_SECONDS
+    return True
+
+
 async def verify_ingestion_auth(
     request: Request,
     authorization: Optional[str] = Header(None),
     x_device_token: Optional[str] = Header(None),
     x_signature: Optional[str] = Header(None),
     x_timestamp: Optional[str] = Header(None),
+    x_nonce: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ) -> dict:
     """
     Authenticates telemetry ingestion from wearable suits or operator devices.
     Accepts:
-      1. Valid user Bearer JWT token
+      1. Admin Bearer JWT token (operators/medics/commanders must NOT be able
+         to inject telemetry — that is a device identity)
       2. Valid Device Token (X-Device-Token header)
-      3. Valid HMAC-SHA256 signature (X-Signature + X-Timestamp headers)
+      3. Valid HMAC-SHA256 signature (X-Signature + X-Timestamp + X-Nonce headers,
+         signed message = "<timestamp>.<nonce>" + raw body, nonce is single-use)
     """
-    # 1. Check Bearer JWT Token
+    # 1. Check Bearer JWT Token (admin only)
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1].strip()
         try:
             token_data = decode_token(token)
-            return {"auth_type": "jwt", "identifier": token_data.username, "role": token_data.role}
+            if token_data.role == "admin":
+                return {"auth_type": "jwt", "identifier": token_data.username, "role": token_data.role}
         except Exception:
             pass  # Fall through to device token checks
 
@@ -217,27 +240,33 @@ async def verify_ingestion_auth(
         if hmac.compare_digest(x_device_token, DEVICE_AUTH_TOKEN):
             return {"auth_type": "device_token", "identifier": "suit_gateway", "role": "device"}
 
-    # 3. Check HMAC-SHA256 Signature
-    if x_signature and x_timestamp:
+    # 3. Check HMAC-SHA256 Signature (with single-use nonce)
+    if x_signature and x_timestamp and x_nonce:
         try:
             req_ts = float(x_timestamp)
-            # Replay attack prevention: timestamp must be within 300 seconds
-            if abs(time.time() - req_ts) <= 300:
-                body_bytes = await request.body()
-                message = f"{x_timestamp}".encode("utf-8") + body_bytes
-                expected_sig = hmac.new(
-                    DEVICE_HMAC_SECRET.encode("utf-8"),
-                    message,
-                    hashlib.sha256
-                ).hexdigest()
-                if hmac.compare_digest(expected_sig, x_signature):
-                    return {"auth_type": "hmac_signature", "identifier": "signed_device", "role": "device"}
-        except Exception:
-            pass
+        except (TypeError, ValueError):
+            req_ts = None
+        # Replay attack prevention: timestamp must be within 300 seconds
+        if req_ts is not None and abs(time.time() - req_ts) <= 300:
+            body_bytes = await request.body()
+            message = f"{x_timestamp}.{x_nonce}".encode("utf-8") + body_bytes
+            expected_sig = hmac.new(
+                DEVICE_HMAC_SECRET.encode("utf-8"),
+                message,
+                hashlib.sha256
+            ).hexdigest()
+            if hmac.compare_digest(expected_sig, x_signature):
+                if not _consume_nonce(x_nonce):
+                    print(f"[SECURITY] Replayed HMAC request rejected (nonce reuse from {request.client.host if request.client else 'unknown'})")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Replayed request rejected. X-Nonce already used.",
+                    )
+                return {"auth_type": "hmac_signature", "identifier": "signed_device", "role": "device"}
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Unauthorized. Valid user Bearer token, X-Device-Token, or X-Signature required.",
+        detail="Unauthorized. Valid admin Bearer token, X-Device-Token, or X-Signature+X-Timestamp+X-Nonce required.",
         headers={"WWW-Authenticate": "Bearer, Device-Token"}
     )
 
