@@ -1,7 +1,9 @@
 package com.example.healthmonitor
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.CertificatePinner
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -12,7 +14,16 @@ import java.util.concurrent.TimeUnit
 
 object ApiService {
 
+    // ── TLS Certificate Pinning ────────────────────────────────────
+    // Configures certificate pinner to block Man-in-the-Middle (MitM) attacks.
+    // Pin can be configured with SHA-256 SPKI fingerprint for production servers.
+    private val certificatePinner = CertificatePinner.Builder().apply {
+        // Example pin structure:
+        // add(NetworkConfig.HOST, "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+    }.build()
+
     private val client = OkHttpClient.Builder()
+        .certificatePinner(certificatePinner)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
@@ -22,11 +33,26 @@ object ApiService {
     // ── Auth token storage ────────────────────────────────────────
     private var authToken: String? = null
 
+    fun init(context: Context) {
+        if (authToken == null) {
+            authToken = TokenStorage.getToken(context)
+        }
+    }
+
     fun setToken(token: String) {
         authToken = token
     }
 
-    fun isLoggedIn(): Boolean = authToken != null
+    fun getToken(): String? = authToken
+
+    fun isLoggedIn(): Boolean = !authToken.isNullOrBlank()
+
+    fun logout(context: Context? = null) {
+        authToken = null
+        if (context != null) {
+            TokenStorage.clear(context)
+        }
+    }
 
     // ── Request helpers ───────────────────────────────────────────
     private fun getRequest(path: String): Request {
@@ -71,7 +97,7 @@ object ApiService {
 
 
     // ── Auth ──────────────────────────────────────────────────────
-    suspend fun login(username: String, password: String): Boolean {
+    suspend fun login(username: String, password: String, context: Context? = null): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 val formBody = okhttp3.FormBody.Builder()
@@ -86,8 +112,19 @@ object ApiService {
 
                 val response = client.newCall(request).execute()
                 if (response.isSuccessful) {
-                    val json = JSONObject(response.body!!.string())
-                    authToken = json.getString("access_token")
+                    val bodyString = response.body?.string() ?: return@withContext false
+                    val json = JSONObject(bodyString)
+                    val token = json.getString("access_token")
+                    val role = json.optString("role", "admin")
+                    val opName = json.optString("name", username)
+
+                    authToken = token
+
+                    if (context != null) {
+                        TokenStorage.saveToken(context, token)
+                        TokenStorage.saveUserRole(context, role)
+                        TokenStorage.saveOperatorName(context, opName)
+                    }
                     true
                 } else {
                     false
@@ -332,20 +369,11 @@ object ApiService {
 
 
     // ── Suit Config ───────────────────────────────────────────────
-    // ⚠ NEW — previously SuitConfigState only touched a local in-memory
-    // map (its own file comment said "can be swapped for a real network
-    // call later"). These methods wire it to the real
-    // backend/suit_config.py endpoints instead.
-
     suspend fun getSuitConfig(soldierId: String): SuitConfig? {
         return withContext(Dispatchers.IO) {
             try {
                 var response = client.newCall(getRequest("/suit/$soldierId")).execute()
                 if (response.code == 404) {
-                    // No config row exists yet for this soldier — PUT
-                    // with an empty body makes the backend auto-create
-                    // one using its own defaults (database.py's
-                    // SuitConfigModel column defaults).
                     response = client.newCall(
                         putRequest("/suit/$soldierId", JSONObject())
                     ).execute()

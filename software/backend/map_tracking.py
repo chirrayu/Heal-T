@@ -4,24 +4,26 @@ from websocket import push_location_update
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from datetime import datetime, timedelta
 import uuid
 
 from database import get_db, LocationModel, SoldierModel
-from auth import get_current_admin
+from auth import get_current_admin, get_current_operator, verify_ingestion_auth, UserOut
 
 router = APIRouter()
 
 
 # ── Schemas ───────────────────────────────────────────────────────
 class LocationIn(BaseModel):
-    soldier_id: str
-    latitude: float
-    longitude: float
+    soldier_id: str = Field(..., min_length=1, max_length=100)
+    latitude: float = Field(..., ge=-90.0, le=90.0, description="Valid latitude (-90 to +90 degrees)")
+    longitude: float = Field(..., ge=-180.0, le=180.0, description="Valid longitude (-180 to +180 degrees)")
 
 class LocationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     soldier_id: str
     soldier_name: str
@@ -32,9 +34,6 @@ class LocationOut(BaseModel):
     longitude: float
     recorded_at: datetime
     minutes_ago: float
-
-    class Config:
-        from_attributes = True
 
 class AllSoldiersMapOut(BaseModel):
     soldier_id: str
@@ -78,7 +77,8 @@ def location_to_out(loc: LocationModel) -> LocationOut:
 @router.post("/location", response_model=LocationOut)
 async def receive_location(
     body: LocationIn,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: dict = Depends(verify_ingestion_auth)
 ):
     soldier = db.query(SoldierModel).filter(
         SoldierModel.id == body.soldier_id
@@ -108,7 +108,10 @@ async def receive_location(
 # This is the main endpoint the Live Map screen polls.
 # Returns latest position for every soldier + movement status.
 @router.get("/live", response_model=List[AllSoldiersMapOut])
-def get_live_map(db: Session = Depends(get_db)):
+def get_live_map(
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
+):
     soldiers = db.query(SoldierModel).all()
     result = []
 
@@ -162,7 +165,8 @@ def get_live_map(db: Session = Depends(get_db)):
 @router.get("/{soldier_id}/latest", response_model=LocationOut)
 def get_soldier_location(
     soldier_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
 ):
     soldier = db.query(SoldierModel).filter(
         SoldierModel.id == soldier_id
@@ -190,7 +194,8 @@ def get_soldier_location(
 def get_soldier_trail(
     soldier_id: str,
     limit: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
 ):
     soldier = db.query(SoldierModel).filter(
         SoldierModel.id == soldier_id
@@ -211,7 +216,8 @@ def get_soldier_trail(
 @router.get("/squad/{squad_id}", response_model=List[AllSoldiersMapOut])
 def get_squad_map(
     squad_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
 ):
     soldiers = db.query(SoldierModel)\
         .filter(SoldierModel.squad_id == squad_id)\

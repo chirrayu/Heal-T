@@ -4,13 +4,13 @@ from websocket import push_alert
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 import uuid
 
 from database import get_db, AlertModel, SoldierModel, VitalsModel
-from auth import get_current_admin
+from auth import get_current_admin, get_current_operator, require_roles, UserOut
 from config import (
     HR_CRITICAL_THRESHOLD,
     SPO2_CRITICAL_THRESHOLD,
@@ -23,6 +23,8 @@ router = APIRouter()
 
 # ── Schemas ───────────────────────────────────────────────────────
 class AlertOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     soldier_id: str
     soldier_name: str
@@ -32,9 +34,6 @@ class AlertOut(BaseModel):
     message: str
     action_required: bool
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class AlertCreate(BaseModel):
     soldier_id: str
@@ -182,7 +181,8 @@ def get_alerts(
     severity: Optional[str] = None,
     soldier_id: Optional[str] = None,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
 ):
     query = db.query(AlertModel).order_by(desc(AlertModel.created_at))
 
@@ -197,21 +197,23 @@ def get_alerts(
 
 # GET /alerts/{alert_id} — get one alert
 @router.get("/{alert_id}", response_model=AlertOut)
-def get_alert(alert_id: str, db: Session = Depends(get_db)):
+def get_alert(
+    alert_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
+):
     alert = db.query(AlertModel).filter(AlertModel.id == alert_id).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     return alert_to_out(alert)
 
 
-# POST /alerts — manually create an alert (admin only)
-# Useful for custom alerts like "Blast Detected" that come from
-# external systems rather than the rules engine.
+# POST /alerts — manually create an alert (admin & commander only)
 @router.post("/", response_model=AlertOut)
 def create_alert(
     body: AlertCreate,
     db: Session = Depends(get_db),
-    admin=Depends(get_current_admin)
+    user: UserOut = Depends(require_roles("admin", "commander"))
 ):
     soldier = db.query(SoldierModel).filter(
         SoldierModel.id == body.soldier_id
@@ -233,12 +235,12 @@ def create_alert(
     return alert_to_out(alert)
 
 
-# DELETE /alerts/{alert_id} — dismiss a single alert
+# DELETE /alerts/{alert_id} — dismiss a single alert (admin & commander)
 @router.delete("/{alert_id}")
 def delete_alert(
     alert_id: str,
     db: Session = Depends(get_db),
-    admin=Depends(get_current_admin)
+    user: UserOut = Depends(require_roles("admin", "commander"))
 ):
     alert = db.query(AlertModel).filter(AlertModel.id == alert_id).first()
     if not alert:
@@ -252,16 +254,19 @@ def delete_alert(
 @router.delete("/")
 def clear_all_alerts(
     db: Session = Depends(get_db),
-    admin=Depends(get_current_admin)
+    admin: UserOut = Depends(get_current_admin)
 ):
     db.query(AlertModel).delete()
     db.commit()
     return {"message": "All alerts cleared"}
 
 
-# GET /alerts/summary — counts per severity for the dashboard badges
+# GET /alerts/summary/counts — counts per severity for the dashboard badges
 @router.get("/summary/counts")
-def get_alert_summary(db: Session = Depends(get_db)):
+def get_alert_summary(
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
+):
     total    = db.query(AlertModel).count()
     critical = db.query(AlertModel).filter(AlertModel.severity == "critical").count()
     warning  = db.query(AlertModel).filter(AlertModel.severity == "warning").count()

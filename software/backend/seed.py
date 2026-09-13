@@ -42,7 +42,7 @@ print("Logged in successfully")
 squads = {}
 
 # Get existing squads first
-existing_squads = requests.get(f"{BASE}/squads/").json()
+existing_squads = requests.get(f"{BASE}/squads/", headers=headers).json()
 for s in existing_squads:
     squads[s["name"]] = s["id"]
     print(f"Found existing squad: {s['name']} -> {s['id']}")
@@ -58,7 +58,7 @@ for name in ["Alpha", "Bravo", "Charlie", "Delta"]:
             print(f"Failed to create squad {name}: {r.text}")
 
 # ── Create or skip soldiers ───────────────────────────────────────
-existing_soldiers = requests.get(f"{BASE}/soldiers/").json()
+existing_soldiers = requests.get(f"{BASE}/soldiers/", headers=headers).json()
 existing_serials  = [s["serial"] for s in existing_soldiers]
 
 soldiers_data = [

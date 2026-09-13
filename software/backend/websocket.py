@@ -7,10 +7,13 @@ from sqlalchemy.orm import Session
 from typing import Dict, List, Optional
 import asyncio
 import json
+import hmac
 from datetime import datetime
 
 from database import get_db, SessionLocal, SoldierModel, VitalsModel, LocationModel, AlertModel, ESP32DeviceModel
 from sqlalchemy import desc
+from auth import decode_token
+from config import DEVICE_AUTH_TOKEN
 
 # Imported lazily inside handlers to avoid circular imports at module load time.
 # (vitals imports websocket, so we import vitals only when needed.)
@@ -252,9 +255,49 @@ def build_full_snapshot(db: Session) -> dict:
 # ── WebSocket endpoints ───────────────────────────────────────────
 
 @router.websocket("/connect")
-async def websocket_connect(websocket: WebSocket, feed: str = "all"):
+async def websocket_connect(
+    websocket: WebSocket,
+    feed: str = "all",
+    token: Optional[str] = None
+):
+    # Authenticate token from query param or initial handshake
+    authenticated_user = None
+    if token:
+        try:
+            authenticated_user = decode_token(token)
+        except Exception:
+            await websocket.close(code=1008, reason="Invalid authentication token")
+            return
+
+    # If no query token was provided, accept and await auth message within 5 seconds
+    if not authenticated_user:
+        await websocket.accept()
+        try:
+            auth_msg_raw = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+            auth_msg = json.loads(auth_msg_raw)
+            if auth_msg.get("type") == "auth" and auth_msg.get("token"):
+                authenticated_user = decode_token(auth_msg["token"])
+                await websocket.send_text(json.dumps({"type": "auth_success", "username": authenticated_user.username}))
+            else:
+                await websocket.send_text(json.dumps({"type": "auth_error", "message": "Authentication required"}))
+                await websocket.close(code=1008, reason="Authentication required")
+                return
+        except Exception:
+            try:
+                await websocket.close(code=1008, reason="Authentication timeout or invalid token")
+            except Exception:
+                pass
+            return
+    else:
+        await websocket.accept()
+
     db = next(get_db())
-    await manager.connect(websocket, feed)
+    manager.active.append(websocket)
+    if feed in manager.subscriptions:
+        manager.subscriptions[feed].append(websocket)
+    else:
+        manager.subscriptions["all"].append(websocket)
+    print(f"WS client connected ({authenticated_user.username}) — feed: {feed} | total: {len(manager.active)}")
 
     try:
         snapshot = build_full_snapshot(db)
@@ -332,11 +375,56 @@ async def websocket_connect(websocket: WebSocket, feed: str = "all"):
 
 # Dedicated WebSocket endpoint for ESP32 devices (Wi-Fi Mode)
 @router.websocket("/esp32/{device_id}")
-async def esp32_websocket_connect(websocket: WebSocket, device_id: str):
-    """Direct WebSocket connection for ESP32 devices when in Wi-Fi mode."""
-    await websocket.accept()
+async def esp32_websocket_connect(
+    websocket: WebSocket,
+    device_id: str,
+    device_token: Optional[str] = None,
+    token: Optional[str] = None
+):
+    """Direct WebSocket connection for ESP32 devices when in Wi-Fi mode with token authentication."""
+    # Check device authentication
+    authenticated = False
+    if device_token and hmac.compare_digest(device_token, DEVICE_AUTH_TOKEN):
+        authenticated = True
+    elif token:
+        try:
+            decode_token(token)
+            authenticated = True
+        except Exception:
+            pass
+
+    if not authenticated:
+        # Give device 5 seconds to authenticate via initial JSON payload
+        await websocket.accept()
+        try:
+            handshake_raw = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+            handshake = json.loads(handshake_raw)
+            if handshake.get("type") == "auth":
+                provided_token = handshake.get("device_token") or handshake.get("token")
+                if provided_token and hmac.compare_digest(provided_token, DEVICE_AUTH_TOKEN):
+                    authenticated = True
+                elif provided_token:
+                    try:
+                        decode_token(provided_token)
+                        authenticated = True
+                    except Exception:
+                        pass
+            if not authenticated:
+                await websocket.send_text(json.dumps({"type": "error", "message": "Unauthorized device"}))
+                await websocket.close(code=1008, reason="Unauthorized device")
+                return
+        except Exception:
+            try:
+                await websocket.close(code=1008, reason="Authentication timeout")
+            except Exception:
+                pass
+            return
+    else:
+        await websocket.accept()
+
+    db = next(get_db())
     esp32_manager.register_device(device_id, mode="wifi", ws=websocket)
-    print(f"ESP32 device connected via Wi-Fi: {device_id}")
+    print(f"ESP32 device authenticated and connected via Wi-Fi: {device_id}")
 
     try:
         await websocket.send_text(json.dumps({"type": "connected", "device_id": device_id}))
@@ -378,6 +466,8 @@ async def esp32_websocket_connect(websocket: WebSocket, device_id: str):
     except Exception as e:
         print(f"ESP32 WebSocket error: {e}")
         esp32_manager.mark_offline(device_id)
+    finally:
+        db.close()
 
 
 # ── Push functions called from other routes ───────────────────────

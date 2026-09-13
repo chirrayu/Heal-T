@@ -1,21 +1,50 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ProGuard / R8 Rules for Triage AI Health Monitor
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# ── General Optimization & Reflection Attributes ───────────────
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
+-keepattributes SourceFile, LineNumberTable
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# ── Health Monitor Data Models & Entities ──────────────────────
+# Preserve serializable data classes and models against R8 name obfuscation
+-keep class com.example.healthmonitor.Soldier { *; }
+-keep class com.example.healthmonitor.AppAlert { *; }
+-keep class com.example.healthmonitor.SuitConfig { *; }
+-keep class com.example.healthmonitor.MapUpdate { *; }
+-keep class com.example.healthmonitor.MedicalRecord { *; }
+-keep class com.example.healthmonitor.StatusSummaryItem { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Preserve App state holders
+-keep class com.example.healthmonitor.AppState { *; }
+-keep class com.example.healthmonitor.AlertState { *; }
+-keep class com.example.healthmonitor.SoldierState { *; }
+-keep class com.example.healthmonitor.LiveMapState { *; }
+-keep class com.example.healthmonitor.TokenStorage { *; }
+-keep class com.example.healthmonitor.NetworkConfig { *; }
+
+# ── Gson Serializer Rules ──────────────────────────────────────
+-keepclassmembers class * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+-keep class com.google.gson.** { *; }
+-keep class * implements com.google.gson.TypeAdapterFactory
+-keep class * implements com.google.gson.JsonSerializer
+-keep class * implements com.google.gson.JsonDeserializer
+
+# ── OkHttp & Okio Network Security & TLS ───────────────────────
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-keep class okhttp3.** { *; }
+-keep interface okhttp3.** { *; }
+-keep class okio.** { *; }
+
+# ── AndroidX Security Crypto & Keystore ────────────────────────
+-keep class androidx.security.crypto.** { *; }
+-dontwarn androidx.security.crypto.**
+
+# ── Kotlin Coroutines & Jetpack Compose ────────────────────────
+-dontwarn kotlinx.coroutines.**
+-keepclassmembers class kotlinx.coroutines.** {
+    volatile <fields>;
+}
+-keep class androidx.compose.** { *; }
+-keep class androidx.lifecycle.** { *; }

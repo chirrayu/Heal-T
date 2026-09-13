@@ -181,6 +181,21 @@ fun AppRoot(onWebViewReady: (WebView) -> Unit) {
     val context = LocalContext.current
     var isLoggedIn by remember { mutableStateOf(false) }
 
+    LaunchedEffect(Unit) {
+        ApiService.init(context)
+        if (TokenStorage.hasToken(context)) {
+            val token = TokenStorage.getToken(context)
+            if (!token.isNullOrBlank()) {
+                ApiService.setToken(token)
+                TokenStorage.getOperatorName(context)?.let {
+                    AppState.operatorName.value = it
+                }
+                isLoggedIn = true
+                WebSocketManager.connect(context)
+            }
+        }
+    }
+
     if (isLoggedIn) {
         Dashboard(onWebViewReady = onWebViewReady)
     } else {

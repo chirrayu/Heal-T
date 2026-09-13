@@ -2,19 +2,18 @@
 # (name, rank, blood group, squad, role, photo). 
 # This replaces your current hardcoded SoldierState list.
 from s3helper import upload_photo, delete_photo, get_presigned_url
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 import uuid
 import os
 
 from database import get_db, SoldierModel, Squad, SuitConfigModel
-from auth import get_current_admin
+from auth import get_current_admin, get_current_operator, UserOut
 
 router = APIRouter()
-
 
 
 # ── Schemas ───────────────────────────────────────────────────────
@@ -39,6 +38,8 @@ class SoldierUpdate(BaseModel):
     status: Optional[str] = None
 
 class SoldierOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     rank_title: str
@@ -51,9 +52,6 @@ class SoldierOut(BaseModel):
     status: str
     photo_url: Optional[str]
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 # ── Helper ────────────────────────────────────────────────────────
@@ -89,7 +87,8 @@ def soldier_to_out(soldier: SoldierModel) -> SoldierOut:
 def get_soldiers(
     squad_id: Optional[str] = None,
     status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
 ):
     query = db.query(SoldierModel)
 
@@ -104,7 +103,11 @@ def get_soldiers(
 
 # GET /soldiers/{soldier_id} — get one soldier
 @router.get("/{soldier_id}", response_model=SoldierOut)
-def get_soldier(soldier_id: str, db: Session = Depends(get_db)):
+def get_soldier(
+    soldier_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
+):
     soldier = db.query(SoldierModel).filter(SoldierModel.id == soldier_id).first()
     if not soldier:
         raise HTTPException(status_code=404, detail="Soldier not found")
@@ -240,6 +243,8 @@ async def upload_soldier_photo(
     file_bytes = await file.read()
     try:
         s3_key = upload_photo(file_bytes, file.content_type, soldier_id)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -253,7 +258,11 @@ async def upload_soldier_photo(
 
 # GET /soldiers/photo/{soldier_id} — serve the photo
 @router.get("/photo/{soldier_id}")
-def get_photo(soldier_id: str, db: Session = Depends(get_db)):
+def get_photo(
+    soldier_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
+):
     soldier = db.query(SoldierModel).filter(
         SoldierModel.id == soldier_id
     ).first()

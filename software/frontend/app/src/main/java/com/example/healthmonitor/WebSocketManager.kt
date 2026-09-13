@@ -48,9 +48,19 @@ object WebSocketManager {
         AppState.connectionStatus.value = "CONNECTING"
         lastPongAt = System.currentTimeMillis()
 
-        val request = Request.Builder()
-            .url(NetworkConfig.WS_URL)
-            .build()
+        val token = ApiService.getToken() ?: TokenStorage.getToken(context)
+        val wsUrl = if (!token.isNullOrBlank()) {
+            if (NetworkConfig.WS_URL.contains("?")) "${NetworkConfig.WS_URL}&token=$token"
+            else "${NetworkConfig.WS_URL}?token=$token"
+        } else {
+            NetworkConfig.WS_URL
+        }
+
+        val requestBuilder = Request.Builder().url(wsUrl)
+        if (!token.isNullOrBlank()) {
+            requestBuilder.addHeader("Authorization", "Bearer $token")
+        }
+        val request = requestBuilder.build()
 
         webSocket = client.newWebSocket(
             request,

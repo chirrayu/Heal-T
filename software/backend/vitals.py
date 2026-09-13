@@ -6,11 +6,11 @@ from websocket import push_vitals_update
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 
 from database import get_db, VitalsModel, SoldierModel
-from auth import get_current_admin
+from auth import get_current_admin, get_current_operator, verify_ingestion_auth, UserOut
 from config import (
     HR_CRITICAL_THRESHOLD,
     SPO2_CRITICAL_THRESHOLD,
@@ -24,25 +24,27 @@ router = APIRouter()
 
 # ── Schemas ───────────────────────────────────────────────────────
 class VitalsIn(BaseModel):
-    soldier_id: str
-    hr: Optional[int] = None
-    spo2: Optional[int] = None
-    temp: Optional[float] = None
-    battery: Optional[int] = None
+    soldier_id: str = Field(..., min_length=1, max_length=100)
+    hr: Optional[int] = Field(None, ge=20, le=250, description="Heart rate in BPM (20-250)")
+    spo2: Optional[int] = Field(None, ge=0, le=100, description="Blood oxygen percentage (0-100%)")
+    temp: Optional[float] = Field(None, ge=70.0, le=115.0, description="Body temperature in °F (70-115°F)")
+    battery: Optional[int] = Field(None, ge=0, le=100, description="Battery percentage (0-100%)")
     
-    # Existing extended fields
-    activity_index: Optional[int] = None
-    respiratory_rate: Optional[int] = None
-    peak_accel_g: Optional[float] = None
-    duration_ms: Optional[float] = None
+    # Extended telemetry fields with physical limits
+    activity_index: Optional[int] = Field(None, ge=0, le=100)
+    respiratory_rate: Optional[int] = Field(None, ge=0, le=80)
+    peak_accel_g: Optional[float] = Field(None, ge=0.0, le=100.0)
+    duration_ms: Optional[float] = Field(None, ge=0.0, le=60000.0)
     blast_timestamp: Optional[datetime] = None
     
-    # NEW: ESP32 / Device tracking fields
-    device_id: Optional[str] = None        # e.g., ESP32 MAC address or serial
-    connection_type: Optional[str] = None  # "wifi", "ble", or "suit"
+    # ESP32 / Device tracking fields
+    device_id: Optional[str] = Field(None, max_length=100)
+    connection_type: Optional[str] = Field(None, pattern="^(wifi|ble|suit|radio)$")
 
 
 class VitalsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     soldier_id: str
     hr: Optional[int]
@@ -55,12 +57,9 @@ class VitalsOut(BaseModel):
     score: Optional[float] = None
     classification: Optional[str] = None
     
-    # NEW: ESP32 tracking fields in output
+    # ESP32 tracking fields in output
     device_id: Optional[str] = None
     connection_type: Optional[str] = None
-
-    class Config:
-        from_attributes = True
 
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -186,17 +185,40 @@ async def process_vitals_reading(body: VitalsIn, db: Session) -> VitalsModel:
 @router.post("/", response_model=VitalsOut)
 async def receive_vitals(
     body: VitalsIn,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: dict = Depends(verify_ingestion_auth)
 ):
     vitals = await process_vitals_reading(body, db)
     return vitals_to_out(vitals)
+
+
+# GET /vitals/all/latest — latest reading for every soldier at once
+@router.get("/all/latest", response_model=List[VitalsOut])
+def get_all_latest_vitals(
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
+):
+    soldiers = db.query(SoldierModel).all()
+    result = []
+
+    for soldier in soldiers:
+        vitals = db.query(VitalsModel)\
+            .filter(VitalsModel.soldier_id == soldier.id)\
+            .order_by(desc(VitalsModel.recorded_at))\
+            .first()
+
+        if vitals:
+            result.append(vitals_to_out(vitals))
+
+    return result
 
 
 # GET /vitals/{soldier_id}/latest — get the most recent reading
 @router.get("/{soldier_id}/latest", response_model=VitalsOut)
 def get_latest_vitals(
     soldier_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
 ):
     vitals = db.query(VitalsModel)\
         .filter(VitalsModel.soldier_id == soldier_id)\
@@ -214,7 +236,8 @@ def get_latest_vitals(
 def get_vitals_history(
     soldier_id: str,
     limit: int = 50,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
 ):
     soldier = db.query(SoldierModel).filter(
         SoldierModel.id == soldier_id
@@ -229,21 +252,3 @@ def get_vitals_history(
         .all()
 
     return [vitals_to_out(v) for v in vitals]
-
-
-# GET /vitals/all/latest — latest reading for every soldier at once
-@router.get("/all/latest", response_model=List[VitalsOut])
-def get_all_latest_vitals(db: Session = Depends(get_db)):
-    soldiers = db.query(SoldierModel).all()
-    result = []
-
-    for soldier in soldiers:
-        vitals = db.query(VitalsModel)\
-            .filter(VitalsModel.soldier_id == soldier.id)\
-            .order_by(desc(VitalsModel.recorded_at))\
-            .first()
-
-        if vitals:
-            result.append(vitals_to_out(vitals))
-
-    return result

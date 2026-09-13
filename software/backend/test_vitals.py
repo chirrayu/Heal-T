@@ -1,14 +1,20 @@
+import os
 import requests
+from config import ADMIN_USERNAME, ADMIN_PASSWORD, PORT, HOST
 
-BASE = "http://localhost:8000"
+BASE = f"http://localhost:{PORT}"
 
-token = requests.post(f"{BASE}/auth/login", data={
-    "username": "admin",
-    "password": "triage2024"
-}).json()["access_token"]
+res = requests.post(f"{BASE}/auth/login", data={
+    "username": ADMIN_USERNAME,
+    "password": ADMIN_PASSWORD
+})
+if res.status_code != 200:
+    print(f"Login failed: {res.status_code} {res.text}")
+    exit(1)
+token = res.json()["access_token"]
 
 headers = {"Authorization": f"Bearer {token}"}
-soldiers = requests.get(f"{BASE}/soldiers/").json()
+soldiers = requests.get(f"{BASE}/soldiers/", headers=headers).json()
 
 vitals_data = [
     {"hr": 72,  "spo2": 98, "temp": 98.6,  "battery": 87},
@@ -24,7 +30,7 @@ for i, soldier in enumerate(soldiers):
     r = requests.post(f"{BASE}/vitals/", json={
         "soldier_id": soldier["id"],
         **v
-    })
+    }, headers=headers)
     print(f"Vitals posted for {soldier['name']} → {r.status_code}")
 
 print("Done")

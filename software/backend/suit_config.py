@@ -1,19 +1,19 @@
-#Stores and retrieves suit config per soldier (which sensors are on, sampling rate, communication channels).
-#  When real hardware exists, this also forwards commands to the suit.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
 from database import get_db, SuitConfigModel, SoldierModel
-from auth import get_current_admin
+from auth import get_current_admin, get_current_operator, require_roles, verify_ingestion_auth, UserOut
 
 router = APIRouter()
 
 
 # ── Schemas ───────────────────────────────────────────────────────
 class SuitConfigOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     soldier_id: str
     soldier_name: str
     soldier_serial: str
@@ -28,9 +28,6 @@ class SuitConfigOut(BaseModel):
     radio_gateway: bool
     emergency_mode: bool
     updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 class SuitConfigUpdate(BaseModel):
     hr_sensor: Optional[bool] = None
@@ -75,7 +72,8 @@ def config_to_out(config: SuitConfigModel) -> SuitConfigOut:
 @router.get("/{soldier_id}", response_model=SuitConfigOut)
 def get_suit_config(
     soldier_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
 ):
     config = db.query(SuitConfigModel).filter(
         SuitConfigModel.soldier_id == soldier_id
@@ -91,13 +89,12 @@ def get_suit_config(
 
 
 # PUT /suit/{soldier_id} — update suit config (admin only)
-# This is what your Android ConfigureSuitScreen calls on Save.
 @router.put("/{soldier_id}", response_model=SuitConfigOut)
 def update_suit_config(
     soldier_id: str,
     body: SuitConfigUpdate,
     db: Session = Depends(get_db),
-    admin=Depends(get_current_admin)
+    admin: UserOut = Depends(get_current_admin)
 ):
     soldier = db.query(SoldierModel).filter(
         SoldierModel.id == soldier_id
@@ -117,7 +114,6 @@ def update_suit_config(
     # Apply only fields that were provided
     if body.hr_sensor is not None:
         config.hr_sensor = body.hr_sensor
-        # Disabling HR sensor clears it from soldier vitals
         if not body.hr_sensor:
             soldier.status = "serious" if soldier.status == "stable" else soldier.status
 
@@ -159,15 +155,13 @@ def update_suit_config(
     return config_to_out(config)
 
 
-# POST /suit/{soldier_id}/emergency — toggle emergency mode
-# Separate endpoint since emergency mode has side effects:
-# marks soldier critical + fires an alert.
+# POST /suit/{soldier_id}/emergency — toggle emergency mode (admin & commander)
 @router.post("/{soldier_id}/emergency", response_model=SuitConfigOut)
 async def toggle_emergency_mode(
     soldier_id: str,
     body: EmergencyModeIn,
     db: Session = Depends(get_db),
-    admin=Depends(get_current_admin)
+    user: UserOut = Depends(require_roles("admin", "commander"))
 ):
     from alerts import evaluate_and_create_alerts
 
@@ -188,11 +182,9 @@ async def toggle_emergency_mode(
     config.updated_at = datetime.utcnow()
 
     if body.enabled:
-        # Capture status before marking critical so rules engine sees the transition
         prev_status = soldier.status
         soldier.status = "critical"
         db.commit()
-        # Await alerts processing
         await evaluate_and_create_alerts(
             soldier=soldier,
             hr=None,
@@ -209,12 +201,12 @@ async def toggle_emergency_mode(
     return config_to_out(config)
 
 
-# POST /suit/{soldier_id}/reset — reset config to factory defaults
+# POST /suit/{soldier_id}/reset — reset config to factory defaults (admin only)
 @router.post("/{soldier_id}/reset", response_model=SuitConfigOut)
 def reset_suit_config(
     soldier_id: str,
     db: Session = Depends(get_db),
-    admin=Depends(get_current_admin)
+    admin: UserOut = Depends(get_current_admin)
 ):
     config = db.query(SuitConfigModel).filter(
         SuitConfigModel.soldier_id == soldier_id
@@ -245,12 +237,12 @@ def reset_suit_config(
 
 
 # GET /suit/{soldier_id}/commands — what the suit should do right now
-# The suit hardware calls this endpoint to check its current config.
-# This is the bridge between the app settings and the real hardware.
+# The suit hardware or operator calls this endpoint to check current config.
 @router.get("/{soldier_id}/commands")
 def get_suit_commands(
     soldier_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: dict = Depends(verify_ingestion_auth)
 ):
     config = db.query(SuitConfigModel).filter(
         SuitConfigModel.soldier_id == soldier_id
@@ -262,8 +254,6 @@ def get_suit_commands(
             detail="No config found"
         )
 
-    # This is what your suit firmware polls to know what to do.
-    # Format this however your hardware protocol requires.
     return {
         "soldier_id": soldier_id,
         "commands": {

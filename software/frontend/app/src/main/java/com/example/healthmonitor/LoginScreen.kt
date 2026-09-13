@@ -17,12 +17,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.VisualTransformation
 import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(onLoginSuccess: () -> Unit) {
 
+    val context  = LocalContext.current
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var error    by remember { mutableStateOf("") }
@@ -103,7 +105,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         scope.launch {
                             loading = true
                             error = ""
-                            val success = ApiService.login(username, password)
+                            val success = ApiService.login(username, password, context)
                             loading = false
                             if (success) {
                                 onLoginSuccess()

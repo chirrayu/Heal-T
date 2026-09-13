@@ -1,13 +1,12 @@
-#CRUD for squads. Add, rename, delete squads and reassign soldiers between them.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List
 from datetime import datetime
 import uuid
 
 from database import get_db, Squad
-from auth import get_current_admin
+from auth import get_current_admin, get_current_operator, UserOut
 
 router = APIRouter()
 
@@ -20,20 +19,22 @@ class SquadUpdate(BaseModel):
     name: str
 
 class SquadOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
     created_at: datetime
     soldier_count: int = 0
-
-    class Config:
-        from_attributes = True
 
 
 # ── Routes ────────────────────────────────────────────────────────
 
 # GET /squads — get all squads
 @router.get("/", response_model=List[SquadOut])
-def get_squads(db: Session = Depends(get_db)):
+def get_squads(
+    db: Session = Depends(get_db),
+    current_user: UserOut = Depends(get_current_operator)
+):
     squads = db.query(Squad).all()
     result = []
     for squad in squads:

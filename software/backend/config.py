@@ -15,6 +15,7 @@ else:
 
 # ── Database ──────────────────────────────────────────────────────
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./triage_ai.db")
+SQLCIPHER_KEY = os.getenv("SQLCIPHER_KEY")  # Optional encryption key for SQLite database at rest
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
 
 # ── JWT Auth ──────────────────────────────────────────────────────
@@ -28,6 +29,14 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "triage2024")
 # Set only for one deployment when the stored admin password needs recovery.
 # Remove it immediately after a successful login.
 RESET_ADMIN_PASSWORD = os.getenv("RESET_ADMIN_PASSWORD", "false").lower() == "true"
+
+# ── Device & Telemetry Ingestion Authentication ──────────────────
+DEVICE_AUTH_TOKEN = os.getenv("DEVICE_AUTH_TOKEN", "suit-dev-token-secret")
+DEVICE_HMAC_SECRET = os.getenv("DEVICE_HMAC_SECRET", "device-hmac-secret-key")
+
+# ── Rate Limiting ────────────────────────────────────────────────
+LOGIN_RATE_LIMIT_PER_MINUTE = int(os.getenv("LOGIN_RATE_LIMIT_PER_MINUTE", "5"))
+PASSWORD_RATE_LIMIT_PER_MINUTE = int(os.getenv("PASSWORD_RATE_LIMIT_PER_MINUTE", "5"))
 
 
 def validate_production_settings() -> None:
@@ -82,3 +91,5 @@ AWS_ACCESS_KEY_ID     = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_REGION            = os.getenv("AWS_REGION", "ap-south-1")
 S3_BUCKET_NAME        = os.getenv("S3_BUCKET_NAME", "triage-ai-photos")
+S3_PRESIGNED_EXPIRATION_SECONDS = int(os.getenv("S3_PRESIGNED_EXPIRATION_SECONDS", "900"))  # 15 min default
+MAX_UPLOAD_PHOTO_BYTES = int(os.getenv("MAX_UPLOAD_PHOTO_BYTES", str(5 * 1024 * 1024)))    # 5 MB
