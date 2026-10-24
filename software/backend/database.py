@@ -207,6 +207,20 @@ def init_db():
             except Exception:
                 pass # Column already exists
 
+    # Auto-enable Row Level Security (RLS) on PostgreSQL / Supabase tables
+    if engine.dialect.name == "postgresql":
+        with engine.connect() as conn:
+            for table in [
+                "squads", "soldiers", "vitals", "alerts",
+                "locations", "suit_configs", "esp32_devices",
+                "user_credentials", "admin_credentials"
+            ]:
+                try:
+                    conn.execute(__import__("sqlalchemy").text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;"))
+                    conn.commit()
+                except Exception:
+                    pass
+
 
 # ── Dependency for FastAPI routes ─────────────────────────────────
 def get_db():

@@ -75,7 +75,22 @@ If you prefer setting up the Web Service manually in Render:
 
 ---
 
-## 4. Recovering Admin Password without Shell Access
+## 4. Enable Supabase Row Level Security (RLS) & Policies
+
+To protect your Supabase database against unauthorized public API access (via Supabase's auto-generated PostgREST endpoints) while ensuring the FastAPI backend continues to operate with full access:
+
+1. In your Supabase Dashboard, open the **SQL Editor**.
+2. Open and copy the SQL statements from [`software/backend/deploy/supabase_rls.sql`](software/backend/deploy/supabase_rls.sql).
+3. Paste into the SQL Editor and click **Run**.
+4. **Why this won't break your existing app:**
+   - The FastAPI backend connects to Supabase via SQLAlchemy using the database owner role (`postgres`). In PostgreSQL, table owners **bypass RLS by default** (unless forced), so all backend queries, background tasks, and WebSocket updates continue to work seamlessly.
+   - `service_role` (used for administrative tasks and Supabase Edge Functions) is granted full access.
+   - Credential tables (`admin_credentials`, `user_credentials`) are strictly sealed off from public/anon/authenticated PostgREST queries.
+   - Operational tables (`soldiers`, `vitals`, `alerts`, etc.) permit authenticated read access while blocking unverified external writes.
+
+---
+
+## 5. Recovering Admin Password without Shell Access
 
 If you ever need to reset the admin password on Render:
 1. In Render Dashboard > **Environment**, set `RESET_ADMIN_PASSWORD=true`.
