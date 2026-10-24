@@ -158,6 +158,7 @@ class ServerCallbacks : public BLEServerCallbacks {
   void onDisconnect(BLEServer* server) override {
     bleDeviceConnected = false;
     Serial.println("[BLE] Phone disconnected, restarting advertising");
+    delay(100);
     BLEDevice::startAdvertising();
   }
 };
@@ -637,6 +638,7 @@ void runWifiMode() {
 // ==================================================================
 void setupBLE() {
   BLEDevice::init((String("SuitBeacon-") + currentSoldierId).c_str());
+  BLEDevice::setMTU(512);
   bleServer = BLEDevice::createServer();
   bleServer->setCallbacks(new ServerCallbacks());
 
@@ -665,6 +667,8 @@ void setupBLE() {
   BLEAdvertising* advertising = BLEDevice::getAdvertising();
   advertising->addServiceUUID(BLE_SERVICE_UUID);
   advertising->setScanResponse(true);
+  advertising->setMinPreferred(0x06);
+  advertising->setMinPreferred(0x12);
   BLEDevice::startAdvertising();
 
   Serial.println("[BLE] Advertising as SuitBeacon, waiting for phone...");

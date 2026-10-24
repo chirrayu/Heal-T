@@ -174,6 +174,7 @@ class MainActivity : ComponentActivity() {
         }
         WebSocketManager.disconnect()
         BleSuitScanner.stopScan(this)
+        BleManager.disconnect()
     }
 }
 
@@ -453,11 +454,11 @@ fun TopBar(onEditOperator: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(if (isCompact) 10.dp else 18.dp)
         ) {
 
-            // Connection badge — reflects real WebSocket state
+            // Connection badge — reflects real WebSocket / BLE state
             val connColor = when (connectionStatus) {
-                "LIVE"       -> Color(0xFF00E676)
-                "CONNECTING" -> Color(0xFFFFD600)
-                else         -> Color(0xFFFF1744)
+                "LIVE", "BLE_CONNECTED"     -> Color(0xFF00E676)
+                "CONNECTING", "BLE_SCANNING" -> Color(0xFFFFD600)
+                else                         -> Color(0xFFFF1744)
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,

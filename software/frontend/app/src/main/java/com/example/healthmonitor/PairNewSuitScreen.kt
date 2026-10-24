@@ -15,6 +15,12 @@
   if suit-to-soldier pairing needs to persist and sync across devices.*/
 package com.example.healthmonitor
 
+import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.content.Intent
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -67,8 +73,41 @@ fun PairNewSuitScreen() {
         BleSuitScanner.startScan(context)
     }
 
-    // ⚠ NEW — actually start/stop the real scan when this screen
-    // appears/disappears, instead of a fake one-shot delay(1400).
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        startScan()
+    }
+
+    val enableBtLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        startScan()
+    }
+
+    fun requestRequiredPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                )
+            )
+        } else {
+            permissionLauncher.launch(
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+            )
+        }
+    }
+
+    fun requestEnableBluetooth() {
+        try {
+            enableBtLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+        } catch (e: Exception) {
+            startScan()
+        }
+    }
+
     DisposableEffect(Unit) {
         startScan()
         onDispose {
@@ -99,14 +138,51 @@ fun PairNewSuitScreen() {
 
         if (permissionError != null) {
             Spacer(Modifier.height(10.dp))
-            Box(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(StatusRed.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
                     .border(1.dp, StatusRed.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(permissionError ?: "", color = StatusRed, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    permissionError ?: "",
+                    color = StatusRed,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(10.dp))
+                if (!BleSuitScanner.isBluetoothEnabled(context)) {
+                    Box(
+                        modifier = Modifier
+                            .background(StatusRed.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                            .clickable { requestEnableBluetooth() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text("ENABLE BLUETOOTH", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else if (!BleSuitScanner.hasPermissions(context)) {
+                    Box(
+                        modifier = Modifier
+                            .background(StatusRed.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                            .clickable { requestRequiredPermissions() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text("GRANT PERMISSION", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .background(StatusRed.copy(alpha = 0.25f), RoundedCornerShape(6.dp))
+                            .clickable { startScan() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text("RETRY", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
 
@@ -298,6 +374,8 @@ fun PairNewSuitScreen() {
                                         if (fresh != null) {
                                             pairedSuits[s.id] = suit.address
                                             justPaired = s to suit
+                                            // Real Bluetooth connection to receive vitals and location
+                                            BleManager.connectDevice(context, suit.address, s.id)
                                         } else {
                                             pairError = "Failed to configure device — check connection"
                                         }
@@ -439,11 +517,17 @@ fun PairNewSuitScreen() {
                                             val s = soldier ?: return@clickable
                                             val suit = selectedSuit ?: return@clickable
                                             scope.launch {
-                                                isPairing = true; pairError = null
+                                                isPairing = true
+                                                pairError = null
                                                 val fresh = SuitConfigState.resetConfig(s.id)
                                                 isPairing = false
-                                                if (fresh != null) { pairedSuits[s.id] = suit.address; justPaired = s to suit }
-                                                else pairError = "Failed to configure device — check connection"
+                                                if (fresh != null) {
+                                                    pairedSuits[s.id] = suit.address
+                                                    justPaired = s to suit
+                                                    BleManager.connectDevice(context, suit.address, s.id)
+                                                } else {
+                                                    pairError = "Failed to configure device — check connection"
+                                                }
                                             }
                                         }
                                         .padding(vertical = 14.dp),
