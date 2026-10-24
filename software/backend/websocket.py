@@ -316,7 +316,15 @@ async def websocket_connect(
                     await websocket.send_text(json.dumps(snapshot, default=str))
 
                 # Android app forwards BLE telemetry from ESP32
+                # (admin only — a stolen low-privilege token must not be able
+                #  to inject vitals for arbitrary soldiers/devices)
                 elif msg.get("type") == "esp32_ble_telemetry":
+                    if authenticated_user.role != "admin":
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "message": "Admin role required to forward device telemetry"
+                        }))
+                        continue
                     device_id = msg.get("device_id")
                     data = msg.get("data", {})
                     if device_id:
@@ -341,7 +349,14 @@ async def websocket_connect(
                         await websocket.send_text(json.dumps({"type": "ack", "status": "ble_data_received"}))
 
                 # Admin/App requests ESP32 to switch connection mode
+                # (admin only — sends live commands to field hardware)
                 elif msg.get("type") == "switch_esp32_mode":
+                    if authenticated_user.role != "admin":
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "message": "Admin role required to command devices"
+                        }))
+                        continue
                     device_id = msg.get("device_id")
                     new_mode = msg.get("mode")  # "wifi" or "ble"
                     if device_id and new_mode:
@@ -388,8 +403,10 @@ async def esp32_websocket_connect(
         authenticated = True
     elif token:
         try:
-            decode_token(token)
-            authenticated = True
+            # Admin JWT only — this endpoint writes device telemetry to the DB,
+            # so ordinary operator tokens must not open it.
+            if decode_token(token).role == "admin":
+                authenticated = True
         except Exception:
             pass
 
@@ -405,8 +422,9 @@ async def esp32_websocket_connect(
                     authenticated = True
                 elif provided_token:
                     try:
-                        decode_token(provided_token)
-                        authenticated = True
+                        # Admin JWT only (see query-param branch above)
+                        if decode_token(provided_token).role == "admin":
+                            authenticated = True
                     except Exception:
                         pass
             if not authenticated:

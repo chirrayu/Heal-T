@@ -26,6 +26,12 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
+      # Telemetry device secrets — the server refuses to boot in production
+      # without non-default values (see config.validate_production_settings)
+      - key: DEVICE_AUTH_TOKEN
+        generateValue: true
+      - key: DEVICE_HMAC_SECRET
+        generateValue: true
       - key: ADMIN_USERNAME
         sync: false
       - key: ADMIN_PASSWORD

@@ -31,8 +31,13 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "triage2024")
 RESET_ADMIN_PASSWORD = os.getenv("RESET_ADMIN_PASSWORD", "false").lower() == "true"
 
 # ── Device & Telemetry Ingestion Authentication ──────────────────
-DEVICE_AUTH_TOKEN = os.getenv("DEVICE_AUTH_TOKEN", "suit-dev-token-secret")
-DEVICE_HMAC_SECRET = os.getenv("DEVICE_HMAC_SECRET", "device-hmac-secret-key")
+# The defaults below exist for LOCAL DEVELOPMENT ONLY. Production refuses
+# to boot while either is still at its default (see validate_production_settings),
+# because these values are public in this repository.
+DEFAULT_DEVICE_AUTH_TOKEN = "suit-dev-token-secret"
+DEFAULT_DEVICE_HMAC_SECRET = "device-hmac-secret-key"
+DEVICE_AUTH_TOKEN = os.getenv("DEVICE_AUTH_TOKEN", DEFAULT_DEVICE_AUTH_TOKEN)
+DEVICE_HMAC_SECRET = os.getenv("DEVICE_HMAC_SECRET", DEFAULT_DEVICE_HMAC_SECRET)
 
 # ── Rate Limiting ────────────────────────────────────────────────
 LOGIN_RATE_LIMIT_PER_MINUTE = int(os.getenv("LOGIN_RATE_LIMIT_PER_MINUTE", "5"))
@@ -50,6 +55,10 @@ def validate_production_settings() -> None:
         invalid.append("ADMIN_USERNAME")
     if ADMIN_PASSWORD == "triage2024":
         invalid.append("ADMIN_PASSWORD")
+    if DEVICE_AUTH_TOKEN == DEFAULT_DEVICE_AUTH_TOKEN:
+        invalid.append("DEVICE_AUTH_TOKEN")
+    if DEVICE_HMAC_SECRET == DEFAULT_DEVICE_HMAC_SECRET:
+        invalid.append("DEVICE_HMAC_SECRET")
     if invalid:
         raise RuntimeError(
             "Production settings are unsafe. Set non-default values for: "
