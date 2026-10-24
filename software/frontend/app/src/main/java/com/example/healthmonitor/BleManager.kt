@@ -83,7 +83,12 @@ object BleManager {
             connectedAddress.value = address
             AppState.connectionStatus.value = "CONNECTING"
             Log.d(TAG, "Connecting to GATT device: $address (soldier=$soldierId)")
-            bluetoothGatt = device.connectGatt(context.applicationContext, false, gattCallback)
+            bluetoothGatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                device.connectGatt(context.applicationContext, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
+            } else {
+                @Suppress("DEPRECATION")
+                device.connectGatt(context.applicationContext, false, gattCallback)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to connect to device $address: ${e.message}")
             AppState.connectionStatus.value = "OFFLINE"
@@ -350,10 +355,15 @@ object BleManager {
 
     private fun handleVitalsPayload(json: JsonObject) {
         val parsedId = json.get("soldier_id")?.takeIf { !it.isJsonNull }?.asString
-        val soldierId = parsedId ?: connectedSoldier.value ?: return
+        val soldierId = connectedSoldier.value ?: parsedId ?: return
+        json.addProperty("soldier_id", soldierId)
 
         mainHandler.post {
             val index = SoldierState.soldiers.indexOfFirst { it.id == soldierId }
+                .takeIf { it != -1 }
+                ?: (if (parsedId != null) SoldierState.soldiers.indexOfFirst { it.id == parsedId }.takeIf { it != -1 } else null)
+                ?: (if (SoldierState.soldiers.size == 1) 0 else -1)
+
             if (index != -1) {
                 val existing = SoldierState.soldiers[index]
                 SoldierState.soldiers[index] = existing.copy(
@@ -372,17 +382,23 @@ object BleManager {
 
     private fun handleLocationPayload(json: JsonObject) {
         val parsedId = json.get("soldier_id")?.takeIf { !it.isJsonNull }?.asString
-        val soldierId = parsedId ?: connectedSoldier.value ?: return
+        val soldierId = connectedSoldier.value ?: parsedId ?: return
+        json.addProperty("soldier_id", soldierId)
+
         val lat = json.get("latitude")?.takeIf { !it.isJsonNull }?.asDouble ?: return
         val lng = json.get("longitude")?.takeIf { !it.isJsonNull }?.asDouble ?: return
 
         mainHandler.post {
-            LiveMapState.pendingMapUpdate.value = MapUpdate(
+            val soldierStatus = SoldierState.soldiers.firstOrNull { it.id == soldierId }?.status
+                ?: (if (parsedId != null) SoldierState.soldiers.firstOrNull { it.id == parsedId }?.status else null)
+                ?: "normal"
+
+            LiveMapState.pendingMapUpdates.add(MapUpdate(
                 soldierId = soldierId,
                 lat = lat,
                 lng = lng,
-                status = SoldierState.soldiers.firstOrNull { it.id == soldierId }?.status ?: "unknown"
-            )
+                status = soldierStatus
+            ))
         }
 
         forwardToBackend("/map/location", json)

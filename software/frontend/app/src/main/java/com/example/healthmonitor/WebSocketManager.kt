@@ -210,6 +210,21 @@ object WebSocketManager {
                 )
 
                 SoldierState.soldiers.add(soldier)
+
+                // ⚠ Seed the live map immediately from snapshot — push a
+                // MapUpdate for each soldier that already has GPS coordinates,
+                // so the map doesn't start blank while waiting for the next
+                // periodic GPS push from the suit (which can be up to 5s away).
+                val lat = s.get("latitude")?.takeIf { !it.isJsonNull }?.asDouble
+                val lng = s.get("longitude")?.takeIf { !it.isJsonNull }?.asDouble
+                if (lat != null && lng != null) {
+                    LiveMapState.pendingMapUpdates.add(MapUpdate(
+                        soldierId = soldier.id,
+                        lat       = lat,
+                        lng       = lng,
+                        status    = soldier.status
+                    ))
+                }
             }
 
             // Update dashboard badge counts
@@ -274,12 +289,12 @@ object WebSocketManager {
             }
 
             // Signal the map to move the dot
-            LiveMapState.pendingMapUpdate.value = MapUpdate(
+            LiveMapState.pendingMapUpdates.add(MapUpdate(
                 soldierId = soldierId,
                 lat       = lat,
                 lng       = lng,
                 status    = status
-            )
+            ))
 
         } catch (e: Exception) {
             Log.e(TAG, "Location update error: ${e.message}")
@@ -335,15 +350,24 @@ data class MapUpdate(
 )
 
 object LiveMapState {
-    val pendingMapUpdate = mutableStateOf<MapUpdate?>(null)
+    // Queue of pending map updates — each entry is a soldier marker to
+    // create/move on the Leaflet WebView. Using a list instead of a single
+    // slot so that a snapshot that seeds N soldiers at once doesn't collapse
+    // to only the last one (race on a single mutableStateOf assignment).
+    val pendingMapUpdates = androidx.compose.runtime.mutableStateListOf<MapUpdate>()
 
-    // ⚠ NEW — whichever map WebView (BattlefieldMap or LiveMapScreen) is
-    // currently on screen registers itself here. This is what lets a
-    // single LaunchedEffect push real WebSocket location updates into
-    // whichever map the user is actually looking at.
+    // ⚠ Keep the single-slot alias for backward compat with BleManager
+    // (which writes to pendingMapUpdate). It simply appends to the queue.
+    var pendingMapUpdate: MapUpdate?
+        get() = pendingMapUpdates.lastOrNull()
+        set(value) { if (value != null) pendingMapUpdates.add(value) }
+
+    // Whichever map WebView (BattlefieldMap or LiveMapScreen) is currently
+    // on screen registers itself here so WebSocket location pushes land
+    // in whichever map the user is actually looking at.
     val activeMapWebView = mutableStateOf<android.webkit.WebView?>(null)
 
-    // ⚠ NEW — the phone's own real GPS position (from MainActivity's
+    // The phone's own real GPS position (from MainActivity's
     // FusedLocationProviderClient), used to center the map on load
     // instead of a hardcoded city.
     val deviceLocation = mutableStateOf<Pair<Double, Double>?>(null)

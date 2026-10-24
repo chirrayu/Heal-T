@@ -54,16 +54,19 @@ fun LiveMapScreen() {
         }
     }
 
-    LaunchedEffect(LiveMapState.pendingMapUpdate.value, localWebView) {
-        val update = LiveMapState.pendingMapUpdate.value ?: return@LaunchedEffect
+    LaunchedEffect(LiveMapState.pendingMapUpdates.size, localWebView) {
         val webView = localWebView ?: return@LaunchedEffect
-        val soldierName = SoldierState.soldiers.find { it.id == update.soldierId }
-            ?.let { "${it.rankTitle} ${it.name}" } ?: update.soldierId
-        val escapedName = soldierName.replace("'", "\\'")
-        webView.evaluateJavascript(
-            "upsertMarker('${update.soldierId}', '$escapedName', '${update.status}', ${update.lat}, ${update.lng});",
-            null
-        )
+        // Drain all queued updates so a snapshot seeding N soldiers renders every marker
+        while (LiveMapState.pendingMapUpdates.isNotEmpty()) {
+            val update = LiveMapState.pendingMapUpdates.removeAt(0)
+            val soldierName = SoldierState.soldiers.find { it.id == update.soldierId }
+                ?.let { "${it.rankTitle} ${it.name}" } ?: update.soldierId
+            val escapedName = soldierName.replace("'", "\\'")
+            webView.evaluateJavascript(
+                "upsertMarker('${update.soldierId}', '$escapedName', '${update.status}', ${update.lat}, ${update.lng});",
+                null
+            )
+        }
     }
 
     Column(

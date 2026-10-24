@@ -19,6 +19,7 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -369,16 +370,16 @@ fun PairNewSuitScreen() {
                                     scope.launch {
                                         isPairing = true
                                         pairError = null
-                                        val fresh = SuitConfigState.resetConfig(s.id)
-                                        isPairing = false
-                                        if (fresh != null) {
-                                            pairedSuits[s.id] = suit.address
-                                            justPaired = s to suit
-                                            // Real Bluetooth connection to receive vitals and location
-                                            BleManager.connectDevice(context, suit.address, s.id)
-                                        } else {
-                                            pairError = "Failed to configure device — check connection"
+                                        try {
+                                            SuitConfigState.resetConfig(s.id)
+                                        } catch (e: Exception) {
+                                            Log.w("PairNewSuit", "Backend config reset skipped: ${e.message}")
                                         }
+                                        isPairing = false
+                                        pairedSuits[s.id] = suit.address
+                                        justPaired = s to suit
+                                        // Real Bluetooth connection to receive vitals and location
+                                        BleManager.connectDevice(context, suit.address, s.id)
                                     }
                                 }
                                 .padding(vertical = 14.dp),
@@ -519,15 +520,15 @@ fun PairNewSuitScreen() {
                                             scope.launch {
                                                 isPairing = true
                                                 pairError = null
-                                                val fresh = SuitConfigState.resetConfig(s.id)
-                                                isPairing = false
-                                                if (fresh != null) {
-                                                    pairedSuits[s.id] = suit.address
-                                                    justPaired = s to suit
-                                                    BleManager.connectDevice(context, suit.address, s.id)
-                                                } else {
-                                                    pairError = "Failed to configure device — check connection"
+                                                try {
+                                                    SuitConfigState.resetConfig(s.id)
+                                                } catch (e: Exception) {
+                                                    Log.w("PairNewSuit", "Backend config reset skipped: ${e.message}")
                                                 }
+                                                isPairing = false
+                                                pairedSuits[s.id] = suit.address
+                                                justPaired = s to suit
+                                                BleManager.connectDevice(context, suit.address, s.id)
                                             }
                                         }
                                         .padding(vertical = 14.dp),
