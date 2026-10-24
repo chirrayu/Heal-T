@@ -80,7 +80,7 @@ fun CasualtyQueueScreen() {
             title = { Text("Mark as Treated?", color = Color.White) },
             text  = {
                 Text(
-                    "${soldier.rankTitle} ${soldier.name} will be moved out of the casualty queue and marked stable.",
+                    "${soldier.rankTitle} ${soldier.name} will be marked stable and moved to standard observation.",
                     color = TextMuted
                 )
             },
@@ -119,10 +119,10 @@ fun CasualtyQueueScreen() {
             onDismissRequest = { confirmEvac = null },
             containerColor   = CardDark,
             icon  = { Icon(Icons.Default.Warning, contentDescription = null, tint = AccentBlue) },
-            title = { Text("Confirm Evacuation", color = Color.White) },
+            title = { Text("Confirm Emergency Transfer", color = Color.White) },
             text  = {
                 Text(
-                    "${soldier.rankTitle} ${soldier.name} (${soldier.serial}) will be flagged for evacuation and marked stable pending transport.",
+                    "${soldier.rankTitle} ${soldier.name} (${soldier.serial}) will be flagged for emergency medical transfer / EMS transport.",
                     color = TextMuted
                 )
             },
@@ -130,8 +130,6 @@ fun CasualtyQueueScreen() {
                 TextButton(
                     enabled = !isProcessing,
                     onClick = {
-                        // ⚠ CHANGED — same fix as Treat above: real
-                        // backend call instead of a local-only update.
                         scope.launch {
                             isProcessing = true
                             val ok = SoldierState.updateSoldier(soldier.copy(status = "stable"))
@@ -142,7 +140,7 @@ fun CasualtyQueueScreen() {
                             }
                         }
                     }
-                ) { Text("Evacuate", color = AccentBlue, fontWeight = FontWeight.Bold) }
+                ) { Text("Transfer", color = AccentBlue, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 TextButton(onClick = { confirmEvac = null }) {
@@ -159,7 +157,7 @@ fun CasualtyQueueScreen() {
             .padding(20.dp)
     ) {
         Text(
-            text = "CASUALTY QUEUE",
+            text = "URGENT CARE QUEUE",
             color = TextMuted,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
@@ -167,7 +165,7 @@ fun CasualtyQueueScreen() {
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = "Triage-ranked worklist, worst first",
+            text = "Patient triage worklist, highest urgency first",
             color = Color.White,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold
@@ -210,7 +208,7 @@ fun CasualtyQueueScreen() {
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Queue is empty — every soldier is stable",
+                        "Queue is empty — all patients are stable",
                         color = TextMuted,
                         fontSize = 13.sp
                     )
@@ -320,7 +318,7 @@ fun CasualtyQueueRow(
         Column(horizontalAlignment = Alignment.End) {
             SmallActionButton("TREAT",    StatusGreen, onTreat)
             Spacer(Modifier.height(6.dp))
-            SmallActionButton("EVACUATE", AccentBlue,  onEvacuate)
+            SmallActionButton("TRANSFER", AccentBlue,  onEvacuate)
         }
     }
 }

@@ -8,6 +8,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -136,7 +138,7 @@ fun SoldiersScreen() {
                     if (ok) {
                         showAddDialog = false
                     } else {
-                        errorMessage = "Failed to add soldier — check connection"
+                        errorMessage = "Failed to add patient — check connection"
                     }
                 }
             }
@@ -167,22 +169,19 @@ fun SoldiersScreen() {
         AlertDialog(
             onDismissRequest = { deletingSoldier = null },
             containerColor = CardDark,
-            title = { Text("Remove Soldier", color = Color.White) },
+            title = { Text("Remove Patient", color = Color.White) },
             text = {
                 Text(
-                    "Remove ${soldier.name} (${soldier.serial}) from the roster?",
+                    "Remove ${soldier.name} (${soldier.serial}) from patient records?",
                     color = TextMuted
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    // ⚠ CHANGED — previously local-only removeAll(); the
-                    // soldier would silently reappear on the next
-                    // WebSocket snapshot since the backend still had them.
                     scope.launch {
                         val ok = SoldierState.removeSoldier(soldier.id)
                         if (!ok) {
-                            errorMessage = "Failed to remove soldier — check connection"
+                            errorMessage = "Failed to remove patient — check connection"
                         }
                         deletingSoldier = null
                     }
@@ -198,76 +197,112 @@ fun SoldiersScreen() {
         )
     }
 
-    Row(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(BgDark)
     ) {
+        val isTablet = maxWidth >= 720.dp
 
-        SquadSidebar()
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .padding(16.dp)
-        ) {
-
-            if (errorMessage != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(StatusRed.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
-                        .border(1.dp, StatusRed.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
-                ) {
-                    Text(errorMessage ?: "", color = StatusRed, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                }
-                Spacer(Modifier.height(10.dp))
+        Row(modifier = Modifier.fillMaxSize()) {
+            if (isTablet) {
+                SquadSidebar()
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(if (isTablet) 16.dp else 12.dp)
             ) {
-                SearchBar(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier.weight(1f)
-                )
-
-                Box(
-                    modifier = Modifier
-                        .height(44.dp)
-                        .background(AccentBlue.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                        .border(1.dp, AccentBlue.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-                        .clickable { showAddDialog = true }
-                        .padding(horizontal = 16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Add, contentDescription = "Add", tint = AccentBlue, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("ADD SOLDIER", color = AccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                if (!isTablet) {
+                    // Mobile Care Groups selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "GROUPS:",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            item {
+                                SquadRow("All Groups", selectedSquad == "All Squads" || selectedSquad == "All Groups") {
+                                    SquadState.selectedSquad.value = "All Squads"
+                                }
+                            }
+                            items(SquadState.squads) { squad ->
+                                SquadRow(squad, selectedSquad == squad) {
+                                    SquadState.selectedSquad.value = squad
+                                }
+                            }
+                        }
                     }
                 }
+
+                if (errorMessage != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(StatusRed.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                            .border(1.dp, StatusRed.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    ) {
+                        Text(errorMessage ?: "", color = StatusRed, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SearchBar(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .height(44.dp)
+                            .background(AccentBlue.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                            .border(1.dp, AccentBlue.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .clickable { showAddDialog = true }
+                            .padding(horizontal = if (isTablet) 16.dp else 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Add, contentDescription = "Add", tint = AccentBlue, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("ADD PATIENT", color = AccentBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                FilterChips(
+                    selected = selectedFilter,
+                    onSelect = { selectedFilter = it }
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                SoldierTable(
+                    soldiers = visibleSoldiers,
+                    onEdit = { editingSoldier = it },
+                    onDelete = { deletingSoldier = it }
+                )
             }
-
-            Spacer(Modifier.height(12.dp))
-
-            FilterChips(
-                selected = selectedFilter,
-                onSelect = { selectedFilter = it }
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            SoldierTable(
-                soldiers = visibleSoldiers,
-                onEdit = { editingSoldier = it },
-                onDelete = { deletingSoldier = it }
-            )
         }
     }
 }
@@ -292,7 +327,7 @@ fun SquadSidebar() {
             .padding(12.dp)
     ) {
         Text(
-            text = "SQUADS",
+            text = "CARE GROUPS",
             color = TextMuted,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
@@ -301,7 +336,7 @@ fun SquadSidebar() {
 
         Spacer(Modifier.height(12.dp))
 
-        SquadRow("All Squads", selectedSquad == "All Squads") {
+        SquadRow("All Groups", selectedSquad == "All Squads" || selectedSquad == "All Groups") {
             SquadState.selectedSquad.value = "All Squads"
         }
 
@@ -320,7 +355,7 @@ fun SquadSidebar() {
             OutlinedTextField(
                 value = newSquadName,
                 onValueChange = { newSquadName = it },
-                placeholder = { Text("Squad name", color = TextMuted, fontSize = 12.sp) },
+                placeholder = { Text("Group / Ward name", color = TextMuted, fontSize = 12.sp) },
                 singleLine = true,
                 enabled = !isAddingSquad,
                 colors = OutlinedTextFieldDefaults.colors(
@@ -383,9 +418,9 @@ fun SquadSidebar() {
                 contentAlignment = Alignment.Center
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Add, contentDescription = "Add squad", tint = TextMuted, modifier = Modifier.size(14.dp))
+                    Icon(Icons.Default.Add, contentDescription = "Add group", tint = TextMuted, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Add Squad", color = TextMuted, fontSize = 12.sp)
+                    Text("Add Group", color = TextMuted, fontSize = 12.sp)
                 }
             }
         }
@@ -434,7 +469,7 @@ fun SearchBar(value: String, onValueChange: (String) -> Unit, modifier: Modifier
         Spacer(Modifier.width(8.dp))
         Box(modifier = Modifier.weight(1f)) {
             if (value.isEmpty()) {
-                Text("Search soldiers...", color = TextMuted, fontSize = 14.sp)
+                Text("Search patients...", color = TextMuted, fontSize = 14.sp)
             }
             BasicTextField(
                 value = value,
@@ -494,59 +529,77 @@ fun FilterChips(selected: String, onSelect: (String) -> Unit) {
 
 
 // ── Soldier Table ──────────────────────────────────────────────────
+// IMPORTANT: weight() modifiers on Row children require a *bounded* parent
+// width. Inside a horizontalScroll box the parent width is unconstrained, so
+// we must give the Column an explicit pixel width — not just widthIn(min=…) —
+// otherwise Compose collapses every weighted child to 0 px and text renders
+// one character per row (the "vertical text" bug).
 @Composable
 fun SoldierTable(
     soldiers: List<Soldier>,
     onEdit: (Soldier) -> Unit,
     onDelete: (Soldier) -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(CardDark, RoundedCornerShape(10.dp))
-            .border(1.dp, BorderDark, RoundedCornerShape(10.dp))
-    ) {
-        Row(
+    // Use BoxWithConstraints so we can pick a column width that fills the
+    // screen on tablets and stays scrollable on phones.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val tableWidth = maxOf(maxWidth, 900.dp)
+
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .horizontalScroll(rememberScrollState())
         ) {
-            TableHeaderText("#", Modifier.width(28.dp))
-            TableHeaderText("SOLDIER", Modifier.weight(2.2f))
-            TableHeaderText("SQUAD", Modifier.weight(1f))
-            TableHeaderText("ROLE", Modifier.weight(1.3f))
-            TableHeaderText("HR", Modifier.weight(0.9f))
-            TableHeaderText("SPO2", Modifier.weight(0.9f))
-            TableHeaderText("TEMP", Modifier.weight(0.9f))
-            TableHeaderText("BATTERY/RISK", Modifier.weight(1.6f))
-            TableHeaderText("STATUS", Modifier.weight(1.1f))
-            TableHeaderText("BLOOD", Modifier.weight(0.7f))
-            Spacer(Modifier.width(60.dp))
-        }
-
-        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(BorderDark))
-
-        if (soldiers.isEmpty()) {
-            Box(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(40.dp),
-                contentAlignment = Alignment.Center
+                    .fillMaxHeight()
+                    .width(tableWidth)           // ← explicit width, not widthIn
+                    .background(CardDark, RoundedCornerShape(10.dp))
+                    .border(1.dp, BorderDark, RoundedCornerShape(10.dp))
             ) {
-                Text("No soldiers match your filters", color = TextMuted, fontSize = 13.sp)
-            }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(soldiers.size) { index ->
-                    val soldier = soldiers[index]
-                    SoldierRow(
-                        index = index + 1,
-                        soldier = soldier,
-                        onEdit = { onEdit(soldier) },
-                        onDelete = { onDelete(soldier) }
-                    )
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(BorderDark.copy(alpha = 0.5f)))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TableHeaderText("#", Modifier.width(28.dp))
+                    TableHeaderText("PATIENT", Modifier.weight(2.2f))
+                    TableHeaderText("GROUP", Modifier.weight(1f))
+                    TableHeaderText("ROLE / CARE", Modifier.weight(1.3f))
+                    TableHeaderText("HR", Modifier.weight(0.9f))
+                    TableHeaderText("SPO2", Modifier.weight(0.9f))
+                    TableHeaderText("TEMP", Modifier.weight(0.9f))
+                    TableHeaderText("BATTERY/RISK", Modifier.weight(1.6f))
+                    TableHeaderText("STATUS", Modifier.weight(1.1f))
+                    TableHeaderText("BLOOD", Modifier.weight(0.7f))
+                    Spacer(Modifier.width(60.dp))
+                }
+
+                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(BorderDark))
+
+                if (soldiers.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No patients match your filters", color = TextMuted, fontSize = 13.sp)
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(soldiers.size) { index ->
+                            val soldier = soldiers[index]
+                            SoldierRow(
+                                index = index + 1,
+                                soldier = soldier,
+                                onEdit = { onEdit(soldier) },
+                                onDelete = { onDelete(soldier) }
+                            )
+                            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(BorderDark.copy(alpha = 0.5f)))
+                        }
+                    }
                 }
             }
         }
@@ -798,11 +851,11 @@ fun SoldierEditDialog(
     onSave: (Soldier) -> Unit
 ) {
     var name by remember { mutableStateOf(existing?.name ?: "") }
-    var rankTitle by remember { mutableStateOf(existing?.rankTitle ?: "Pvt.") }
+    var rankTitle by remember { mutableStateOf(existing?.rankTitle ?: "Mr.") }
     var rankOrder by remember { mutableStateOf(existing?.rankOrder?.toString() ?: "4") }
-    var serial by remember { mutableStateOf(existing?.serial ?: "S-00${SoldierState.soldiers.size + 1}") }
-    var squad by remember { mutableStateOf(existing?.squad ?: SquadState.squads.firstOrNull() ?: "Alpha") }
-    var role by remember { mutableStateOf(existing?.role ?: "Rifleman") }
+    var serial by remember { mutableStateOf(existing?.serial ?: "P-00${SoldierState.soldiers.size + 1}") }
+    var squad by remember { mutableStateOf(existing?.squad ?: SquadState.squads.firstOrNull() ?: "General") }
+    var role by remember { mutableStateOf(existing?.role ?: "General Observation") }
     var photoUri by remember { mutableStateOf(existing?.photoUri) }
     var bloodGroup by remember { mutableStateOf(existing?.bloodGroup ?: "O+") }
     val launcher = rememberLauncherForActivityResult(
@@ -824,7 +877,7 @@ fun SoldierEditDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (existing == null) "ADD SOLDIER" else "EDIT SOLDIER",
+                    text = if (existing == null) "ADD PATIENT" else "EDIT PATIENT",
                     color = Color.White,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -882,18 +935,18 @@ fun SoldierEditDialog(
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(modifier = Modifier.weight(1f)) {
-                    DialogField("Rank Title (e.g. Sgt.)", rankTitle) { rankTitle = it }
+                    DialogField("Title / Prefix (e.g. Mr., Ms., Dr.)", rankTitle) { rankTitle = it }
                 }
                 Box(modifier = Modifier.weight(1f)) {
-                    DialogField("Rank Order (1=highest)", rankOrder) { rankOrder = it.filter { c -> c.isDigit() } }
+                    DialogField("Priority Level (1=High, 4=Normal)", rankOrder) { rankOrder = it.filter { c -> c.isDigit() } }
                 }
             }
 
             Spacer(Modifier.height(10.dp))
-            DialogField("Serial (e.g. S-007)", serial) { serial = it }
+            DialogField("Patient ID (e.g. P-007)", serial) { serial = it }
 
             Spacer(Modifier.height(10.dp))
-            DialogField("Role (e.g. Rifleman)", role) { role = it }
+            DialogField("Care Category (e.g. Outpatient, Cardiac)", role) { role = it }
 
             Spacer(Modifier.height(10.dp))
             Text("Blood Group", color = TextMuted, fontSize = 12.sp)
@@ -922,7 +975,7 @@ fun SoldierEditDialog(
                 }
             }
             Spacer(Modifier.height(10.dp))
-            Text("Squad", color = TextMuted, fontSize = 12.sp)
+            Text("Care Group / Ward", color = TextMuted, fontSize = 12.sp)
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 SquadState.squads.forEach { s ->

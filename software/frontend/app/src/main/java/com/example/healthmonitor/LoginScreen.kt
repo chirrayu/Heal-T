@@ -19,6 +19,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import kotlinx.coroutines.launch
 
 @Composable
@@ -39,25 +41,35 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     ) {
         Column(
             modifier = Modifier
-                .width(380.dp)
+                .fillMaxWidth()
+                .widthIn(max = 400.dp)
+                .padding(horizontal = 24.dp)
                 .background(Color(0xFF081B33), RoundedCornerShape(16.dp))
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Image(
+                painter = painterResource(id = R.drawable.app_logo),
+                contentDescription = "HEAL-T Logo",
+                modifier = Modifier
+                    .size(96.dp)
+                    .padding(bottom = 8.dp)
+            )
 
             Text(
-                text = "TRIAGE AI",
+                text = "HEAL-T",
                 color = Color(0xFF00E676),
-                fontSize = 28.sp,
+                fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp
             )
 
             Text(
-                text = "COMMAND CENTER",
+                text = "HEALTHCARE & VITALS PORTAL",
                 color = Color(0xFF6B7F99),
-                fontSize = 12.sp,
-                letterSpacing = 2.sp
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.5.sp
             )
 
             Spacer(Modifier.height(32.dp))

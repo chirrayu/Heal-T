@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -43,82 +44,171 @@ fun MedicalRecordsScreen() {
     var selectedId by remember { mutableStateOf(soldiers.firstOrNull()?.id) }
     val selectedSoldier = soldiers.find { it.id == selectedId }
 
-    Row(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(BgDark)
     ) {
-        // ── Soldier picker sidebar ──────────────────────────────────
-        Column(
-            modifier = Modifier
-                .width(220.dp)
-                .fillMaxHeight()
-                .background(CardDark)
-                .border(width = 1.dp, color = BorderDark)
-                .padding(12.dp)
-        ) {
-            Text(
-                text = "SELECT SOLDIER",
-                color = TextMuted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-            Spacer(Modifier.height(12.dp))
+        val isTablet = maxWidth >= 700.dp
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(soldiers, key = { it.id }) { soldier ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                if (soldier.id == selectedId) AccentBlue.copy(alpha = 0.15f) else Color.Transparent,
-                                RoundedCornerShape(6.dp)
-                            )
-                            .border(
-                                1.dp,
-                                if (soldier.id == selectedId) AccentBlue.copy(alpha = 0.5f) else Color.Transparent,
-                                RoundedCornerShape(6.dp)
-                            )
-                            .clickable { selectedId = soldier.id }
-                            .padding(horizontal = 10.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(statusColor(soldier.status), CircleShape)
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "${soldier.rankTitle} ${soldier.name}",
-                                color = if (soldier.id == selectedId) Color.White else Color(0xFFB8C6D9),
-                                fontSize = 13.sp,
-                                fontWeight = if (soldier.id == selectedId) FontWeight.Bold else FontWeight.Normal
-                            )
-                            Text(soldier.serial, color = TextMuted, fontSize = 11.sp)
-                        }
-                        Box(
-                            modifier = Modifier
-                                .background(StatusRed.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(soldier.bloodGroup, color = StatusRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        if (isTablet) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                // ── Tablet: Patient picker sidebar ──────────────────────
+                Column(
+                    modifier = Modifier
+                        .width(240.dp)
+                        .fillMaxHeight()
+                        .background(CardDark)
+                        .border(width = 1.dp, color = BorderDark)
+                        .padding(14.dp)
+                ) {
+                    Text(
+                        text = "SELECT PATIENT",
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(soldiers, key = { it.id }) { soldier ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        if (soldier.id == selectedId) AccentBlue.copy(alpha = 0.15f) else Color.Transparent,
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (soldier.id == selectedId) AccentBlue.copy(alpha = 0.5f) else Color.Transparent,
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .clickable { selectedId = soldier.id }
+                                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(statusColor(soldier.status), CircleShape)
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "${soldier.rankTitle} ${soldier.name}",
+                                        color = if (soldier.id == selectedId) Color.White else Color(0xFFB8C6D9),
+                                        fontSize = 13.sp,
+                                        fontWeight = if (soldier.id == selectedId) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                    Text(soldier.serial, color = TextMuted, fontSize = 11.sp)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .background(StatusRed.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(soldier.bloodGroup, color = StatusRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 }
-            }
-        }
 
-        // ── Record panel ─────────────────────────────────────────
-        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            if (selectedSoldier == null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No soldier selected", color = TextMuted)
+                // ── Tablet: Record panel ─────────────────────────────
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    if (selectedSoldier == null) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No patient selected", color = TextMuted)
+                        }
+                    } else {
+                        MedicalRecordPanel(soldier = selectedSoldier)
+                    }
                 }
-            } else {
-                MedicalRecordPanel(soldier = selectedSoldier)
+            }
+        } else {
+            // ── Phone: Horizontal patient carousel at top + full-width panel below ─
+            Column(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(CardDark)
+                        .border(width = 1.dp, color = BorderDark)
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "SELECT PATIENT",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(soldiers, key = { it.id }) { soldier ->
+                            val isSelected = soldier.id == selectedId
+                            Row(
+                                modifier = Modifier
+                                    .background(
+                                        if (isSelected) AccentBlue.copy(alpha = 0.15f) else BgDark,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) AccentBlue.copy(alpha = 0.6f) else BorderDark,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { selectedId = soldier.id }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(statusColor(soldier.status), CircleShape)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        "${soldier.rankTitle} ${soldier.name}",
+                                        color = if (isSelected) Color.White else TextMuted,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                    Text(
+                                        soldier.serial,
+                                        color = TextMuted.copy(alpha = 0.7f),
+                                        fontSize = 10.sp
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .background(StatusRed.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                ) {
+                                    Text(soldier.bloodGroup, color = StatusRed, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Phone: Full width record panel
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (selectedSoldier == null) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No patient selected", color = TextMuted)
+                        }
+                    } else {
+                        MedicalRecordPanel(soldier = selectedSoldier)
+                    }
+                }
             }
         }
     }

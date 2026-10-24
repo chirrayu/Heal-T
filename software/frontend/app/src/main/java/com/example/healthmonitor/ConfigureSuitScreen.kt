@@ -14,6 +14,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -55,55 +56,141 @@ fun ConfigureSuitScreen() {
     var selectedId by remember { mutableStateOf(soldiers.firstOrNull()?.id) }
     val selectedSoldier = soldiers.find { it.id == selectedId }
 
-    Row(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(bgDark)
     ) {
-        // ── Soldier picker sidebar ──────────────────────────────────
-        Column(
-            modifier = Modifier
-                .width(220.dp)
-                .fillMaxHeight()
-                .background(cardDark)
-                .border(width = 1.dp, color = borderDark)
-                .padding(12.dp)
-        ) {
-            Text(
-                text = "SELECT SUIT",
-                color = textMuted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-            Spacer(Modifier.height(12.dp))
+        val isTablet = maxWidth >= 700.dp
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(soldiers, key = { it.id }) { soldier ->
-                    // "Configured" now means "we've loaded/confirmed a
-                    // real config from the backend for this soldier" —
-                    // since the backend auto-creates a default row on
-                    // first load, this fills in as you visit each soldier
-                    // rather than meaning "customized away from default".
-                    val hasLoadedConfig = SuitConfigState.configs.containsKey(soldier.id)
-                    SuitPickerRow(
-                        soldier = soldier,
-                        selected = soldier.id == selectedId,
-                        configured = hasLoadedConfig,
-                        onClick = { selectedId = soldier.id }
+        if (isTablet) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                // ── Tablet: Patient picker sidebar ──────────────────────
+                Column(
+                    modifier = Modifier
+                        .width(240.dp)
+                        .fillMaxHeight()
+                        .background(cardDark)
+                        .border(width = 1.dp, color = borderDark)
+                        .padding(14.dp)
+                ) {
+                    Text(
+                        text = "SELECT PATIENT",
+                        color = textMuted,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
                     )
+                    Spacer(Modifier.height(12.dp))
+
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(soldiers, key = { it.id }) { soldier ->
+                            val hasLoadedConfig = SuitConfigState.configs.containsKey(soldier.id)
+                            SuitPickerRow(
+                                soldier = soldier,
+                                selected = soldier.id == selectedId,
+                                configured = hasLoadedConfig,
+                                onClick = { selectedId = soldier.id }
+                            )
+                        }
+                    }
+                }
+
+                // ── Tablet: Config panel ──────────────────────────────
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    if (selectedSoldier == null) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No patient selected", color = textMuted)
+                        }
+                    } else {
+                        SuitConfigPanel(soldier = selectedSoldier)
+                    }
                 }
             }
-        }
+        } else {
+            // ── Phone: Horizontal patient carousel at top + full-width panel below ─
+            Column(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(cardDark)
+                        .border(width = 1.dp, color = borderDark)
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "SELECT PATIENT",
+                        color = textMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
 
-        // ── Config panel ──────────────────────────────────────────
-        Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            if (selectedSoldier == null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No soldier selected", color = textMuted)
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(soldiers, key = { it.id }) { soldier ->
+                            val isSelected = soldier.id == selectedId
+                            val hasLoadedConfig = SuitConfigState.configs.containsKey(soldier.id)
+                            Row(
+                                modifier = Modifier
+                                    .background(
+                                        if (isSelected) accentBlue.copy(alpha = 0.15f) else bgDark,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) accentBlue.copy(alpha = 0.6f) else borderDark,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { selectedId = soldier.id }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(statusColor(soldier.status), CircleShape)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        "${soldier.rankTitle} ${soldier.name}",
+                                        color = if (isSelected) Color.White else textMuted,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                    Text(
+                                        soldier.serial,
+                                        color = textMuted.copy(alpha = 0.7f),
+                                        fontSize = 10.sp
+                                    )
+                                }
+                                if (hasLoadedConfig) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = statusGreen,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
-            } else {
-                SuitConfigPanel(soldier = selectedSoldier)
+
+                // Phone: Full width config panel
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (selectedSoldier == null) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("No patient selected", color = textMuted)
+                        }
+                    } else {
+                        SuitConfigPanel(soldier = selectedSoldier)
+                    }
+                }
             }
         }
     }
@@ -213,7 +300,7 @@ fun SuitConfigPanel(soldier: Soldier) {
             text = {
                 Text(
                     "This immediately marks ${soldier.rankTitle} ${soldier.name} as CRITICAL " +
-                            "and fires an emergency alert to command, mirroring what the suit does on impact.",
+                            "and fires an emergency alert to care staff, triggering immediate medical attention.",
                     color = textMuted
                 )
             },
@@ -256,7 +343,7 @@ fun SuitConfigPanel(soldier: Soldier) {
             title = { Text("Reset to Factory Defaults", color = Color.White) },
             text = {
                 Text(
-                    "All sensor, sampling and communication settings for this suit will revert to defaults.",
+                    "All sensor, sampling and communication settings for this device will revert to defaults.",
                     color = textMuted
                 )
             },
@@ -309,7 +396,7 @@ fun SuitConfigPanel(soldier: Soldier) {
         ) {
             Column {
                 Text(
-                    text = "CONFIGURE SUIT",
+                    text = "CONFIGURE WEARABLE DEVICE",
                     color = textMuted,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -371,7 +458,7 @@ fun SuitConfigPanel(soldier: Soldier) {
             ) {
                 Column {
                     Text("Reading Interval", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                    Text("How often the suit reports vitals", color = textMuted, fontSize = 12.sp)
+                    Text("How often the device reports vitals", color = textMuted, fontSize = 12.sp)
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -401,9 +488,9 @@ fun SuitConfigPanel(soldier: Soldier) {
 
         // ── Communication ───────────────────────────────────────
         ConfigSection(title = "COMMUNICATION", icon = Icons.Default.WifiTethering) {
-            ToggleRow("Wi-Fi Uplink", "Base station connectivity", draft.wifiEnabled) { update { c -> c.copy(wifiEnabled = it) } }
-            ToggleRow("Mesh Network", "Soldier-to-soldier relay", draft.meshEnabled) { update { c -> c.copy(meshEnabled = it) } }
-            ToggleRow("Radio Gateway", "Long-range fallback radio", draft.radioGateway) { update { c -> c.copy(radioGateway = it) } }
+            ToggleRow("Wi-Fi Uplink", "Clinic / Base station connectivity", draft.wifiEnabled) { update { c -> c.copy(wifiEnabled = it) } }
+            ToggleRow("Mesh Network", "Device-to-device mesh relay", draft.meshEnabled) { update { c -> c.copy(meshEnabled = it) } }
+            ToggleRow("Radio Gateway", "Long-range telemetry fallback", draft.radioGateway) { update { c -> c.copy(radioGateway = it) } }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -427,7 +514,7 @@ fun SuitConfigPanel(soldier: Soldier) {
                     Column {
                         Text("Emergency Mode", color = statusRed, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         Text(
-                            "Marks soldier CRITICAL and pushes an alert instantly",
+                            "Marks patient CRITICAL and pushes an alert instantly",
                             color = textMuted,
                             fontSize = 12.sp
                         )
@@ -467,7 +554,7 @@ fun SuitConfigPanel(soldier: Soldier) {
         Spacer(Modifier.height(16.dp))
 
         // ── Commands preview (what the firmware would poll) ─────
-        ConfigSection(title = "SUIT COMMAND PREVIEW", icon = Icons.Default.Bluetooth) {
+        ConfigSection(title = "DEVICE COMMAND PREVIEW", icon = Icons.Default.Bluetooth) {
             Text(
                 text = buildString {
                     append("sensors: hr=${draft.hrSensor}, spo2=${draft.spo2Sensor}, ")

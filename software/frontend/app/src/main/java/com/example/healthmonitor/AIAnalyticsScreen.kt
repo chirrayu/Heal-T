@@ -168,7 +168,7 @@ fun AIAnalyticsScreen() {
                     letterSpacing = 1.5.sp
                 )
                 Text(
-                    "${assessments.size} PERSONNEL",
+                    "${assessments.size} PATIENTS",
                     color = textMuted,
                     fontSize = 11.sp,
                     letterSpacing = 1.sp
@@ -247,14 +247,14 @@ private fun AIHeader(
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Text(
-                                "TA-CSS AI ENGINE",
+                                "CLINICAL TRIAGE AI",
                                 color = Color.White,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.5.sp
                             )
                             Text(
-                                "Triage Assessment • Combat Severity Scoring",
+                                "Triage Assessment & Health Risk Scoring",
                                 color = textMuted,
                                 fontSize = 11.sp
                             )
@@ -288,7 +288,7 @@ private fun AIHeader(
                                     )
                             )
                             Text(
-                                "THREAT: $threatLevel",
+                                "RISK LEVEL: $threatLevel",
                                 color = threatColor,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
@@ -322,7 +322,7 @@ private fun AIHeader(
                         textMuted
                     )
                     MiniDivider()
-                    MiniStat("MODEL", "TA-CSS v1.2", purpleAccent)
+                    MiniStat("MODEL", "TRIAGE-AI v1.2", purpleAccent)
                 }
             }
         }
@@ -494,7 +494,7 @@ private fun SquadReadinessMatrix(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "SQUAD READINESS MATRIX",
+                    "CARE GROUP WELLNESS MATRIX",
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
@@ -517,7 +517,7 @@ private fun SquadReadinessMatrix(
                     .background(bgDarker, RoundedCornerShape(6.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
-                Text("SQUAD", color = textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                Text("GROUP", color = textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp, modifier = Modifier.weight(1.4f))
                 Text("SIZE", color = textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp, modifier = Modifier.weight(0.6f), textAlign = TextAlign.Center)
@@ -525,7 +525,7 @@ private fun SquadReadinessMatrix(
                     letterSpacing = 1.sp, modifier = Modifier.weight(0.6f), textAlign = TextAlign.Center)
                 Text("AVG SCORE", color = textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                Text("STATUS", color = textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                Text("HEALTH", color = textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
             }
 
@@ -612,7 +612,7 @@ private fun SquadReadinessMatrix(
 
             if (squads.isEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Text("No squad data available", color = textMuted, fontSize = 12.sp)
+                Text("No care group data available", color = textMuted, fontSize = 12.sp)
             }
         }
     }
@@ -644,7 +644,7 @@ private fun ThreatAssessmentPanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "AI THREAT ASSESSMENT",
+                    "AI HEALTH RISK ASSESSMENT",
                     color = Color.White,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
@@ -687,7 +687,7 @@ private fun ThreatAssessmentPanel(
                             letterSpacing = 2.sp
                         )
                         Text(
-                            "No critical threats detected. All personnel within normal parameters.",
+                            "No critical risks detected. All patients within normal vital parameters.",
                             color = textMuted,
                             fontSize = 11.sp,
                             textAlign = TextAlign.Center

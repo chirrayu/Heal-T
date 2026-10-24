@@ -88,7 +88,7 @@
 
 <div id="map"></div>
 
-<div class="map-title">BATTLEFIELD MAP</div>
+<div class="map-title">PATIENT LOCATION MAP</div>
 <div class="live-badge">LIVE</div>
 
 <div class="legend">
@@ -104,6 +104,16 @@
     // Starts as a neutral wide-zoom world view instead; Kotlin calls
     // centerMap(lat, lng) as soon as the phone's real GPS location is
     // available, so this never shows a specific city by default.
+    // Escape HTML to prevent XSS in map markers
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;')
+                  .replace(/'/g, '&#39;');
+    }
+
     var map = L.map('map', {
         center: [20, 0],
         zoom: 2,
@@ -156,12 +166,12 @@
             markers[id].setLatLng([lat, lng]);
             markers[id].setIcon(createDotIcon(status));
             markers[id].setPopupContent(
-                '<b>' + name + '</b><br>Status: ' + status.toUpperCase() + '<br>ID: ' + id
+                '<b>' + escapeHtml(name) + '</b><br>Status: ' + status.toUpperCase() + '<br>ID: ' + id
             );
         } else {
             var marker = L.marker([lat, lng], { icon: createDotIcon(status) }).addTo(map);
             marker.bindPopup(
-                '<b>' + name + '</b><br>Status: ' + status.toUpperCase() + '<br>ID: ' + id
+                '<b>' + escapeHtml(name) + '</b><br>Status: ' + status.toUpperCase() + '<br>ID: ' + id
             );
             markers[id] = marker;
         }

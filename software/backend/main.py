@@ -88,6 +88,7 @@ ALLOWED_ORIGINS = [
     "https://triage-ai-backend-trpy.onrender.com",  # production backend URL
     "http://localhost:8000",                          # local dev
     "http://10.0.2.2:8000",                          # Android emulator → host
+    "*",
 ]
 
 app.add_middleware(

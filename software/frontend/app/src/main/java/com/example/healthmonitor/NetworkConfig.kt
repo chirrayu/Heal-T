@@ -1,31 +1,42 @@
 package com.example.healthmonitor
 
 /**
- * Network configuration enforcing HTTPS and WSS protocols.
- * Supports certificate pinning host matching and dynamic environment switching.
+ * Network configuration connecting the Android Frontend to the AWS EC2 Backend.
+ *
+ *  Public IP:  15.206.194.22 (Used by Android APK across Internet / cellular / Wi-Fi)
+ *  Private IP: 172.31.8.234  (Used inside AWS VPC / EC2 internal network)
+ *  Backend Port: 8000
  */
 object NetworkConfig {
-    // ── Environment Toggle ──────────────────────────────────────────
-    // Set USE_LOCAL_BACKEND to true when running FastAPI locally (`python main.py`).
-    // In Android Emulator, "10.0.2.2" maps directly to localhost on the development PC.
-    // If testing on a physical Android phone over Wi-Fi, change LOCAL_HOST to your PC's LAN IP (e.g., "192.168.1.50").
-    const val USE_LOCAL_BACKEND = true
 
-    // Local development settings (HTTP/WS on port 8000)
-    const val LOCAL_HOST = "10.0.2.2:8000"
+    // AWS EC2 IP Configuration
+    const val PUBLIC_IP  = "15.206.194.22"
+    const val PRIVATE_IP = "172.31.8.234"
+    const val PORT       = 8000
+
+    // Set to true only if testing inside Android Emulator against PC localhost (10.0.2.2:8000)
+    const val USE_LOCAL_BACKEND = false
+
+    // Local development settings (Android emulator -> PC localhost)
+    const val LOCAL_HOST     = "10.0.2.2:$PORT"
     const val LOCAL_BASE_URL = "http://$LOCAL_HOST"
     const val LOCAL_WS_URL   = "ws://$LOCAL_HOST/ws/connect?feed=all"
 
-    // Production deployment settings (HTTPS/WSS)
-    const val PROD_HOST = "13.126.202.93"
-    const val PROD_BASE_URL = "https://$PROD_HOST"
-    const val PROD_WS_URL   = "wss://$PROD_HOST/ws/connect?feed=all"
+    // Production AWS EC2 Backend (Public IP)
+    const val PROD_HOST     = "$PUBLIC_IP:$PORT"
+    const val PROD_BASE_URL = "http://$PROD_HOST"
+    const val PROD_WS_URL   = "ws://$PROD_HOST/ws/connect?feed=all"
 
-    // Active endpoints used across the app (ApiService, WebSocketManager, BleManager)
-    val HOST: String get() = if (USE_LOCAL_BACKEND) LOCAL_HOST else PROD_HOST
+    // Internal VPC Backend (Private IP)
+    const val PRIVATE_HOST     = "$PRIVATE_IP:$PORT"
+    const val PRIVATE_BASE_URL = "http://$PRIVATE_HOST"
+    const val PRIVATE_WS_URL   = "ws://$PRIVATE_HOST/ws/connect?feed=all"
+
+    // Active endpoints resolved at runtime
+    val HOST: String     get() = if (USE_LOCAL_BACKEND) LOCAL_HOST     else PROD_HOST
     val BASE_URL: String get() = if (USE_LOCAL_BACKEND) LOCAL_BASE_URL else PROD_BASE_URL
-    val WS_URL: String get() = if (USE_LOCAL_BACKEND) LOCAL_WS_URL else PROD_WS_URL
+    val WS_URL: String   get() = if (USE_LOCAL_BACKEND) LOCAL_WS_URL   else PROD_WS_URL
 
-    // Development security override flag
+    // Allows user-installed CA certificates in debug builds for Charles / Burp proxying
     const val USE_DEV_SECURITY_OVERRIDE = true
 }

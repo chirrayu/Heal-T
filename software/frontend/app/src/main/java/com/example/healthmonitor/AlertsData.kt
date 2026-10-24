@@ -119,7 +119,7 @@ object AlertState {
                     severity       = "warning",
                     soldierName    = name,
                     soldierSerial  = serial,
-                    message        = "Suit battery at ${soldier.battery}%. Soldier may lose connectivity soon.",
+                    message        = "Device battery at ${soldier.battery}%. Patient monitoring may lose connectivity soon.",
                     actionRequired = false,
                     notify         = notify
                 )

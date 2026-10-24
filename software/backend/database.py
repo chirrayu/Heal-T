@@ -13,8 +13,12 @@ from config import DATABASE_URL, SQLCIPHER_KEY, ENVIRONMENT
 _connect_args = {}
 if DATABASE_URL.startswith("sqlite"):
     _connect_args["check_same_thread"] = False
-elif (DATABASE_URL.startswith("postgres://") or DATABASE_URL.startswith("postgresql://")) and ENVIRONMENT == "production":
-    _connect_args["sslmode"] = "require"
+elif DATABASE_URL.startswith("postgres://") or DATABASE_URL.startswith("postgresql://"):
+    # Supabase and all hosted PostgreSQL (RDS, etc.) require SSL in production.
+    # We apply sslmode=require unconditionally for any postgres:// URL so that
+    # local docker-compose postgres works too (it accepts but ignores the flag).
+    if ENVIRONMENT == "production":
+        _connect_args["sslmode"] = "require"
 
 engine = create_engine(
     DATABASE_URL,

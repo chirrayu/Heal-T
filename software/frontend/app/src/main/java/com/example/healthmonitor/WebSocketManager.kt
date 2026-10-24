@@ -56,6 +56,7 @@ object WebSocketManager {
             NetworkConfig.WS_URL
         }
 
+
         val requestBuilder = Request.Builder().url(wsUrl)
         if (!token.isNullOrBlank()) {
             requestBuilder.addHeader("Authorization", "Bearer $token")

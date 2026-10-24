@@ -33,7 +33,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,7 +71,7 @@ import com.google.android.gms.location.*
 
 // ── App State ─────────────────────────────────────────────────────
 object AppState {
-    var operatorName     = mutableStateOf("GHOST-6")
+    var operatorName     = mutableStateOf("Dr. Sarah Chen")
     var criticalCount    = mutableStateOf(1)
     var alertCount       = mutableStateOf(0)
     var connectionStatus = mutableStateOf("OFFLINE")   // "CONNECTING" | "LIVE" | "OFFLINE" — set by WebSocketManager
@@ -307,25 +310,36 @@ fun Dashboard(
                             "Alerts" -> {
                                 AlertsScreen()
                             }
-                            "Soldiers" -> {
+                            "Patients", "Soldiers" -> {
                                 SoldiersScreen()
                             }
                             "Dashboard" -> {
-                                Column(
-                                    modifier = Modifier
-                                        .padding(12.dp)
-                                        .verticalScroll(rememberScrollState())
-                                ){
-                                    StatusSummaryBar()
-                                    Spacer(Modifier.height(12.dp))
-                                    BattlefieldMap(onWebViewReady)
-                                    Spacer(Modifier.height(12.dp))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                    val dashboardWidth = maxWidth
+                                    Column(
+                                        modifier = Modifier
+                                            .padding(12.dp)
+                                            .verticalScroll(rememberScrollState())
                                     ){
-                                        Box(Modifier.weight(1.6f)) { PriorityCasualtiesPanel() }
-                                        Box(Modifier.weight(1f)) { RecentAlertsPanel() }
+                                        StatusSummaryBar()
+                                        Spacer(Modifier.height(12.dp))
+                                        BattlefieldMap(onWebViewReady)
+                                        Spacer(Modifier.height(12.dp))
+                                        if (dashboardWidth >= 720.dp) {
+                                            // Tablet: side-by-side panels
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ){
+                                                Box(Modifier.weight(1.6f)) { PriorityCasualtiesPanel() }
+                                                Box(Modifier.weight(1f)) { RecentAlertsPanel() }
+                                            }
+                                        } else {
+                                            // Phone: stacked panels
+                                            PriorityCasualtiesPanel()
+                                            Spacer(Modifier.height(12.dp))
+                                            RecentAlertsPanel()
+                                        }
                                     }
                                 }
                             }
@@ -334,17 +348,23 @@ fun Dashboard(
                                     LiveMapScreen()
                                 }
                             }
-                            "Configure Suit" -> {
+                            "Configure Device", "Configure Suit" -> {
                                 ConfigureSuitScreen()
                             }
-                            "Casualty Queue" -> {
+                            "Urgent Care Queue", "Casualty Queue" -> {
                                 CasualtyQueueScreen()
                             }
-                            "Pair New Suit" -> {
+                            "Pair New Device", "Pair Device", "Pair New Suit" -> {
                                 PairNewSuitScreen()
                             }
                             "Medical Records" -> {
                                 MedicalRecordsScreen()
+                            }
+                            "AI Analytics" -> {
+                                AIAnalyticsScreen()
+                            }
+                            "Settings" -> {
+                                SettingsScreen(wifiEnabled = true, onWifiToggle = {})
                             }
                             else -> {
                                 Column(modifier = Modifier.padding(12.dp)) {
@@ -390,22 +410,26 @@ fun TopBar(onEditOperator: () -> Unit) {
         }
     }
 
-    Row(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .height(72.dp)
             .background(Color(0xFF081B33))
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            .padding(horizontal = 16.dp)
     ) {
+        val isCompact = maxWidth < 480.dp
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
 
         // ── Left: Title ───────────────────────────────────────
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "TRIAGE AI",
-                color = Color(0xFF6B7F99),
-                fontSize = 13.sp,
+                text = "HEAL-T",
+                color = Color(0xFF00FF88),
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
             )
@@ -424,8 +448,9 @@ fun TopBar(onEditOperator: () -> Unit) {
 
         // ── Right: Status indicators ──────────────────────────
         Row(
+            modifier = if (isCompact) Modifier.horizontalScroll(rememberScrollState()) else Modifier,
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(18.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (isCompact) 10.dp else 18.dp)
         ) {
 
             // Connection badge — reflects real WebSocket state
@@ -590,7 +615,7 @@ fun TopBar(onEditOperator: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 Text(
-                    text = "OPR · $operatorName",
+                    text = "PROVIDER · $operatorName",
                     color = Color(0xFF6B7F99),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
@@ -603,7 +628,8 @@ fun TopBar(onEditOperator: () -> Unit) {
                 )
             }
         }
-    }
+        } // close inner Row
+    } // close BoxWithConstraints
 }
 
 // ⚠ REMOVED — TopHeader() used to live here. It was a completely unused
@@ -693,13 +719,31 @@ fun StatusSummaryBar() {
         StatusSummaryItem("CRITICAL", criticalCount, Color(0xFFFF445A), Icons.Default.Favorite,             total),
         StatusSummaryItem("OFFLINE",  offlineCount,  Color(0xFF6B7F99), Icons.Default.WifiOff,               total),
     )
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items.forEach { item ->
-            Box(modifier = Modifier.weight(1f)) {
-                StatusSummaryCard(item)
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        if (maxWidth >= 640.dp) {
+            // Tablet / large phone: 5 equal-weight cards in a row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items.forEach { item ->
+                    Box(modifier = Modifier.weight(1f)) {
+                        StatusSummaryCard(item)
+                    }
+                }
+            }
+        } else {
+            // Compact phone: horizontal scrolling row of fixed-width cards
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(end = 8.dp)
+            ) {
+                items(items.size) { idx ->
+                    Box(modifier = Modifier.width(130.dp)) {
+                        StatusSummaryCard(items[idx])
+                    }
+                }
             }
         }
     }
@@ -807,7 +851,7 @@ fun PriorityCasualtiesPanel(){
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)){
 
             Text(
-                text = "PRIORITY CASUALTIES",
+                text = "PRIORITY PATIENTS",
                 color = Color.White,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
@@ -818,7 +862,7 @@ fun PriorityCasualtiesPanel(){
 
             if (casualties.isEmpty()) {
                 Text(
-                    text = "No active casualties",
+                    text = "No urgent patients",
                     color = Color(0xFF6B7F99),
                     fontSize = 13.sp
                 )
@@ -980,7 +1024,7 @@ fun SidePanel(){
 
         Text(
 
-            "TRIAGE AI",
+            "HEAL-T",
 
             color =
                 Color(
@@ -994,7 +1038,7 @@ fun SidePanel(){
 
         Text(
 
-            "COMMAND CENTER",
+            "CLINICAL MONITOR",
 
             color =
                 Color(
@@ -1017,21 +1061,19 @@ fun SidePanel(){
 
             "Live Map",
 
-            "Soldiers",
+            "Patients",
 
             "Alerts",
 
-            "Casualty Queue",
+            "Urgent Care Queue",
 
-            "Configure Suit",
+            "Configure Device",
 
-            "Pair New Suit",
+            "Pair New Device",
 
             "Medical Records",
 
             "AI Analytics",
-
-            "Reports",
 
             "Settings"
 

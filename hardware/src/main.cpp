@@ -77,7 +77,7 @@
 // ── User config ─────────────────────────────────────────────────
 #define WIFI_SSID       "YOUR_WIFI_SSID"       // first-boot fallback only
 #define WIFI_PASSWORD   "YOUR_WIFI_PASSWORD"
-#define BACKEND_HOST    "192.168.1.50"          // first-boot fallback only — app can override over BLE
+#define BACKEND_HOST    "15.206.194.22"          // first-boot fallback only — app can override over BLE
 #define BACKEND_PORT    8000                    // first-boot fallback only — app can override over BLE
 #define BACKEND_SCHEME  "http"                  // use "https" for a public deployment
 #define SOLDIER_ID      "SOLDIER-001"           // first-boot fallback only — app can override over BLE; must match an existing SoldierModel.id in the DB

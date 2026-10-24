@@ -83,7 +83,7 @@ fun PairNewSuitScreen() {
             .padding(20.dp)
     ) {
         Text(
-            text = "PAIR NEW SUIT",
+            text = "PAIR WEARABLE DEVICE",
             color = TextMuted,
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
@@ -91,7 +91,7 @@ fun PairNewSuitScreen() {
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = "Connect a wearable suit to a soldier profile",
+            text = "Connect a wearable sensor device to a patient profile",
             color = Color.White,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold
@@ -112,7 +112,10 @@ fun PairNewSuitScreen() {
 
         Spacer(Modifier.height(20.dp))
 
-        Row(modifier = Modifier.fillMaxSize()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val isTablet = maxWidth >= 700.dp
+            if (isTablet) {
+                Row(modifier = Modifier.fillMaxSize()) {
 
             // ── Left: scan results ─────────────────────────────
             Column(
@@ -129,7 +132,7 @@ fun PairNewSuitScreen() {
                         Icon(Icons.Default.Bluetooth, contentDescription = null, tint = AccentBlue, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "NEARBY SUITS",
+                            "NEARBY DEVICES",
                             color = TextMuted,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -161,12 +164,12 @@ fun PairNewSuitScreen() {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = AccentBlue, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
                             Spacer(Modifier.height(12.dp))
-                            Text("Scanning for nearby suits…", color = TextMuted, fontSize = 13.sp)
+                            Text("Scanning for nearby wearable devices…", color = TextMuted, fontSize = 13.sp)
                         }
                     }
                 } else if (scanResults.isEmpty()) {
                     Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
-                        Text("No suits found nearby", color = TextMuted, fontSize = 13.sp)
+                        Text("No wearable devices found nearby", color = TextMuted, fontSize = 13.sp)
                     }
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -223,7 +226,7 @@ fun PairNewSuitScreen() {
                     }
                 } else {
                     Text(
-                        "ASSIGN TO SOLDIER",
+                        "ASSIGN TO PATIENT",
                         color = TextMuted,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -245,7 +248,7 @@ fun PairNewSuitScreen() {
 
                     if (selectedSuit == null) {
                         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                            Text("Select a suit from the left to continue", color = TextMuted, fontSize = 13.sp)
+                            Text("Select a device from the left to continue", color = TextMuted, fontSize = 13.sp)
                         }
                     } else {
                         Column(modifier = Modifier.weight(1f)) {
@@ -296,7 +299,7 @@ fun PairNewSuitScreen() {
                                             pairedSuits[s.id] = suit.address
                                             justPaired = s to suit
                                         } else {
-                                            pairError = "Failed to configure suit — check connection"
+                                            pairError = "Failed to configure device — check connection"
                                         }
                                     }
                                 }
@@ -321,22 +324,145 @@ fun PairNewSuitScreen() {
                         }
                     }
                 }
-            }
-        }
+            } // end Right Column
+                } // end tablet Row
+            } else {
+                // Phone: vertical stack
+                Column(modifier = Modifier.fillMaxSize()) {
 
-        if (pairedSuits.isNotEmpty()) {
-            Spacer(Modifier.height(16.dp))
-            Text(
-                "PAIRED THIS SESSION: " + pairedSuits.entries.joinToString(", ") { (soldierId, address) ->
-                    val name = SoldierState.soldiers.find { it.id == soldierId }?.name ?: soldierId
-                    "$address → $name"
-                },
-                color = TextMuted,
-                fontSize = 11.sp
-            )
-        }
-    }
-}
+                    // ── Nearby Devices section ───────────────────────────
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Bluetooth, contentDescription = null, tint = AccentBlue, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("NEARBY DEVICES", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                        }
+                        Row(
+                            modifier = Modifier
+                                .background(BorderDark.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                .clickable(enabled = !isScanning) { startScan() }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Rescan", tint = if (isScanning) TextMuted else AccentBlue, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (isScanning) "SCANNING..." else "RESCAN", color = if (isScanning) TextMuted else AccentBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    if (isScanning && scanResults.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 20.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = AccentBlue, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
+                                Spacer(Modifier.height(10.dp))
+                                Text("Scanning for nearby wearable devices…", color = TextMuted, fontSize = 13.sp)
+                            }
+                        }
+                    } else if (scanResults.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 20.dp), contentAlignment = Alignment.Center) {
+                            Text("No wearable devices found nearby", color = TextMuted, fontSize = 13.sp)
+                        }
+                    } else {
+                        LazyColumn(modifier = Modifier.heightIn(max = 220.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(scanResults, key = { it.address }) { suit ->
+                                SuitDiscoveryRow(suit = suit, selected = suit.address == selectedSuit?.address, onClick = { selectedSuit = suit })
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // ── Assign to Patient section ─────────────────────────
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .background(CardDark, RoundedCornerShape(12.dp))
+                            .padding(18.dp)
+                    ) {
+                        if (justPaired != null) {
+                            val (soldier, suit) = justPaired!!
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = StatusGreen, modifier = Modifier.size(40.dp))
+                                    Spacer(Modifier.height(12.dp))
+                                    Text("Paired successfully", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("${suit.suitName} → ${soldier.rankTitle} ${soldier.name}", color = TextMuted, fontSize = 13.sp)
+                                    Spacer(Modifier.height(20.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .background(AccentBlue.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                            .border(1.dp, AccentBlue.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                            .clickable { justPaired = null; selectedSuit = null; selectedSoldierId = null; startScan() }
+                                            .padding(horizontal = 20.dp, vertical = 10.dp)
+                                    ) { Text("PAIR ANOTHER", color = AccentBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                                }
+                            }
+                        } else {
+                            Text("ASSIGN TO PATIENT", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Spacer(Modifier.height(12.dp))
+                            if (pairError != null) {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().background(StatusRed.copy(alpha = 0.12f), RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp)
+                                ) { Text(pairError ?: "", color = StatusRed, fontSize = 12.sp) }
+                                Spacer(Modifier.height(10.dp))
+                            }
+                            if (selectedSuit == null) {
+                                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                    Text("Select a device above to continue", color = TextMuted, fontSize = 13.sp)
+                                }
+                            } else {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        items(SoldierState.soldiers, key = { it.id }) { soldier ->
+                                            val alreadyHasSuit = pairedSuits.containsKey(soldier.id)
+                                            SoldierAssignRow(soldier = soldier, selected = soldier.id == selectedSoldierId, alreadyPaired = alreadyHasSuit, onClick = { if (!alreadyHasSuit) selectedSoldierId = soldier.id })
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.height(14.dp))
+                                val soldier = SoldierState.soldiers.find { it.id == selectedSoldierId }
+                                val canConfirm = soldier != null && !isPairing
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(if (canConfirm) StatusGreen.copy(alpha = 0.15f) else BorderDark.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                        .border(1.dp, if (canConfirm) StatusGreen.copy(alpha = 0.5f) else Color.Transparent, RoundedCornerShape(8.dp))
+                                        .clickable(enabled = canConfirm) {
+                                            val s = soldier ?: return@clickable
+                                            val suit = selectedSuit ?: return@clickable
+                                            scope.launch {
+                                                isPairing = true; pairError = null
+                                                val fresh = SuitConfigState.resetConfig(s.id)
+                                                isPairing = false
+                                                if (fresh != null) { pairedSuits[s.id] = suit.address; justPaired = s to suit }
+                                                else pairError = "Failed to configure device — check connection"
+                                            }
+                                        }
+                                        .padding(vertical = 14.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.BluetoothConnected, contentDescription = null, tint = if (canConfirm) StatusGreen else TextMuted, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(if (isPairing) "PAIRING..." else "CONFIRM & PAIR", color = if (canConfirm) StatusGreen else TextMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    } // end phone assign column
+                } // end phone Column
+            } // end else (phone branch)
+        } // end BoxWithConstraints
+    } // end Column
+} // end PairNewSuitScreen
 
 @Composable
 fun SuitDiscoveryRow(suit: DiscoveredSuit, selected: Boolean, onClick: () -> Unit) {

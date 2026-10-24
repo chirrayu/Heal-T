@@ -246,7 +246,7 @@ fun AlertTimelineCard(alert: AppAlert, isLast: Boolean) {
                 ) {
                     Icon(
                         imageVector = when {
-                            alert.title.contains("Blast", true) -> Icons.Default.Bolt
+                            alert.title.contains("Fall", true) || alert.title.contains("Impact", true) || alert.title.contains("Blast", true) -> Icons.Default.Bolt
                             alert.title.contains("Sensor", true) || alert.title.contains("Movement", true) -> Icons.Default.WifiOff
                             else -> Icons.Default.Warning
                         },
