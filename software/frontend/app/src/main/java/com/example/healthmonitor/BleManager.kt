@@ -410,6 +410,7 @@ object BleManager {
                 val body = json.toString().toRequestBody("application/json".toMediaType())
                 val request = Request.Builder()
                     .url(restBaseUrl + path)
+                    .addHeader("X-Device-Token", "suit-dev-token-secret")
                     .post(body)
                     .build()
 

@@ -596,6 +596,7 @@ void postJson(const char* path, const String& body) {
     }
   }
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-Device-Token", "suit-dev-token-secret");
 
   int code = http.POST(body);
   if (code > 0) {

@@ -9,7 +9,7 @@ from sqlalchemy import desc
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 
-from database import get_db, VitalsModel, SoldierModel
+from database import get_db, VitalsModel, SoldierModel, get_or_create_soldier
 from auth import get_current_admin, get_current_operator, verify_ingestion_auth, UserOut
 from config import (
     HR_CRITICAL_THRESHOLD,
@@ -110,16 +110,12 @@ async def process_vitals_reading(body: VitalsIn, db: Session) -> VitalsModel:
     Core logic to validate, save, score, and alert on incoming vitals.
     Shared by both the HTTP POST endpoint and the WebSocket ESP32 handler.
     """
-    # Confirm soldier exists
-    soldier = db.query(SoldierModel).filter(
-        SoldierModel.id == body.soldier_id
-    ).first()
-    if not soldier:
-        raise HTTPException(status_code=404, detail="Soldier not found")
+    # Confirm soldier exists or auto-provision
+    soldier = get_or_create_soldier(body.soldier_id, db)
 
     # Save vitals reading
     vitals = VitalsModel(
-        soldier_id=body.soldier_id,
+        soldier_id=soldier.id,
         hr=body.hr,
         spo2=body.spo2,
         temp=body.temp,
@@ -174,7 +170,7 @@ async def process_vitals_reading(body: VitalsIn, db: Session) -> VitalsModel:
     )
     
     # Push live update to connected WebSocket clients (Android app)
-    await push_vitals_update(body.soldier_id, db)
+    await push_vitals_update(soldier.id, db)
     
     return vitals
 

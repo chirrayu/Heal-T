@@ -229,3 +229,85 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def get_or_create_soldier(soldier_id: str, db) -> SoldierModel:
+    """
+    Finds a soldier by id, serial, normalized serial, or linked ESP32 device.
+    If not found, auto-provisions a new soldier so real hardware connections
+    work out of the box without manual pre-registration.
+    """
+    if not soldier_id:
+        raise ValueError("soldier_id cannot be empty")
+
+    # 1. Exact ID match
+    soldier = db.query(SoldierModel).filter(SoldierModel.id == soldier_id).first()
+    if soldier:
+        return soldier
+
+    # 2. Exact Serial match
+    soldier = db.query(SoldierModel).filter(SoldierModel.serial == soldier_id).first()
+    if soldier:
+        return soldier
+
+    # 3. Normalized serial match (e.g., SOLDIER-001 -> S-001 or vice versa)
+    norm = soldier_id.replace("SOLDIER-", "S-").replace("SOLDIER_", "S-")
+    soldier = db.query(SoldierModel).filter(SoldierModel.serial == norm).first()
+    if soldier:
+        return soldier
+
+    # 4. Check if linked via ESP32DeviceModel
+    device = db.query(ESP32DeviceModel).filter(ESP32DeviceModel.device_id == soldier_id).first()
+    if device and device.soldier:
+        return device.soldier
+
+    # 5. Check by Name
+    soldier = db.query(SoldierModel).filter(SoldierModel.name == soldier_id).first()
+    if soldier:
+        return soldier
+
+    # 6. Auto-provision so hardware immediately surfaces in the app
+    import uuid
+    default_squad = db.query(Squad).first()
+    if not default_squad:
+        default_squad = Squad(id=str(uuid.uuid4()), name="Alpha")
+        db.add(default_squad)
+        db.commit()
+        db.refresh(default_squad)
+
+    soldier = SoldierModel(
+        id=soldier_id,
+        name=f"Unit {soldier_id}",
+        rank_title="Pvt.",
+        rank_order=4,
+        serial=soldier_id,
+        squad_id=default_squad.id,
+        role="Field Wearable",
+        blood_group="O+",
+        status="stable"
+    )
+    db.add(soldier)
+    db.commit()
+    db.refresh(soldier)
+
+    # Ensure suit config exists
+    config = db.query(SuitConfigModel).filter(SuitConfigModel.soldier_id == soldier.id).first()
+    if not config:
+        config = SuitConfigModel(soldier_id=soldier.id)
+        db.add(config)
+        db.commit()
+
+    # Track ESP32 device
+    device = db.query(ESP32DeviceModel).filter(ESP32DeviceModel.device_id == soldier_id).first()
+    if not device:
+        device = ESP32DeviceModel(
+            device_id=soldier_id,
+            soldier_id=soldier.id,
+            name=f"Suit-{soldier_id}",
+            connection_mode="wifi",
+            status="online"
+        )
+        db.add(device)
+        db.commit()
+
+    return soldier

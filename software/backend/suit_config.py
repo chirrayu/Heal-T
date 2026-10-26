@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
-from database import get_db, SuitConfigModel, SoldierModel
+from database import get_db, SuitConfigModel, SoldierModel, get_or_create_soldier
 from auth import get_current_admin, get_current_operator, require_roles, verify_ingestion_auth, UserOut
 
 router = APIRouter()
@@ -75,40 +75,36 @@ def get_suit_config(
     db: Session = Depends(get_db),
     current_user: UserOut = Depends(get_current_operator)
 ):
+    soldier = get_or_create_soldier(soldier_id, db)
     config = db.query(SuitConfigModel).filter(
-        SuitConfigModel.soldier_id == soldier_id
+        SuitConfigModel.soldier_id == soldier.id
     ).first()
 
     if not config:
-        raise HTTPException(
-            status_code=404,
-            detail="No suit config found for this soldier"
-        )
+        config = SuitConfigModel(soldier_id=soldier.id)
+        db.add(config)
+        db.commit()
+        db.refresh(config)
 
     return config_to_out(config)
 
 
-# PUT /suit/{soldier_id} — update suit config (admin only)
+# PUT /suit/{soldier_id} — update suit config
 @router.put("/{soldier_id}", response_model=SuitConfigOut)
 def update_suit_config(
     soldier_id: str,
     body: SuitConfigUpdate,
     db: Session = Depends(get_db),
-    admin: UserOut = Depends(get_current_admin)
+    current_user: UserOut = Depends(get_current_operator)
 ):
-    soldier = db.query(SoldierModel).filter(
-        SoldierModel.id == soldier_id
-    ).first()
-    if not soldier:
-        raise HTTPException(status_code=404, detail="Soldier not found")
-
+    soldier = get_or_create_soldier(soldier_id, db)
     config = db.query(SuitConfigModel).filter(
-        SuitConfigModel.soldier_id == soldier_id
+        SuitConfigModel.soldier_id == soldier.id
     ).first()
 
     # Create default config if it doesn't exist yet
     if not config:
-        config = SuitConfigModel(soldier_id=soldier_id)
+        config = SuitConfigModel(soldier_id=soldier.id)
         db.add(config)
 
     # Apply only fields that were provided
@@ -201,22 +197,21 @@ async def toggle_emergency_mode(
     return config_to_out(config)
 
 
-# POST /suit/{soldier_id}/reset — reset config to factory defaults (admin only)
+# POST /suit/{soldier_id}/reset — reset config to factory defaults
 @router.post("/{soldier_id}/reset", response_model=SuitConfigOut)
 def reset_suit_config(
     soldier_id: str,
     db: Session = Depends(get_db),
-    admin: UserOut = Depends(get_current_admin)
+    current_user: UserOut = Depends(get_current_operator)
 ):
+    soldier = get_or_create_soldier(soldier_id, db)
     config = db.query(SuitConfigModel).filter(
-        SuitConfigModel.soldier_id == soldier_id
+        SuitConfigModel.soldier_id == soldier.id
     ).first()
 
     if not config:
-        raise HTTPException(
-            status_code=404,
-            detail="No suit config found for this soldier"
-        )
+        config = SuitConfigModel(soldier_id=soldier.id)
+        db.add(config)
 
     # Reset all fields to defaults
     config.hr_sensor          = True
@@ -244,15 +239,16 @@ def get_suit_commands(
     db: Session = Depends(get_db),
     auth: dict = Depends(verify_ingestion_auth)
 ):
+    soldier = get_or_create_soldier(soldier_id, db)
     config = db.query(SuitConfigModel).filter(
-        SuitConfigModel.soldier_id == soldier_id
+        SuitConfigModel.soldier_id == soldier.id
     ).first()
 
     if not config:
-        raise HTTPException(
-            status_code=404,
-            detail="No config found"
-        )
+        config = SuitConfigModel(soldier_id=soldier.id)
+        db.add(config)
+        db.commit()
+        db.refresh(config)
 
     return {
         "soldier_id": soldier_id,

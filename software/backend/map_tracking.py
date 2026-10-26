@@ -9,7 +9,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 import uuid
 
-from database import get_db, LocationModel, SoldierModel
+from database import get_db, LocationModel, SoldierModel, get_or_create_soldier
 from auth import get_current_admin, get_current_operator, verify_ingestion_auth, UserOut
 
 router = APIRouter()
@@ -80,11 +80,7 @@ async def receive_location(
     db: Session = Depends(get_db),
     auth: dict = Depends(verify_ingestion_auth)
 ):
-    soldier = db.query(SoldierModel).filter(
-        SoldierModel.id == body.soldier_id
-    ).first()
-    if not soldier:
-        raise HTTPException(status_code=404, detail="Soldier not found")
+    soldier = get_or_create_soldier(body.soldier_id, db)
 
     # Validate coordinates are real GPS values
     if not (-90 <= body.latitude <= 90):
@@ -93,14 +89,14 @@ async def receive_location(
         raise HTTPException(status_code=400, detail="Invalid longitude")
 
     location = LocationModel(
-        soldier_id=body.soldier_id,
+        soldier_id=soldier.id,
         latitude=body.latitude,
         longitude=body.longitude
     )
     db.add(location)
     db.commit()
     db.refresh(location)
-    await push_location_update(body.soldier_id, db)
+    await push_location_update(soldier.id, db)
     return location_to_out(location)
 
 
